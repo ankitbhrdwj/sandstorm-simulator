@@ -19,6 +19,10 @@ extern crate core_affinity;
 use client::config::ClientConfig;
 use client::cycles;
 
+use rand::distributions::{Distribution, Uniform};
+use rand::prelude::*;
+use rand::rngs::ThreadRng;
+
 use std::mem::transmute;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::Arc;
@@ -27,6 +31,9 @@ use std::thread;
 struct Sender {
     // Socket to send the packets.
     socket: Arc<UdpSocket>,
+
+    // The server ip-address.
+    server_ip: String,
 
     // Total number of requests to be sent out.
     requests: u64,
@@ -43,17 +50,26 @@ struct Sender {
 
     // The time stamp at which the next request must be issued in cycles.
     next: u64,
+
+    // The tenant random number generator.
+    tenant_rng: Box<Uniform<u16>>,
+
+    // Random number generator.
+    rng: Box<ThreadRng>,
 }
 
 impl Sender {
     fn new(socket: Arc<UdpSocket>, config: &ClientConfig) -> Sender {
         Sender {
             socket: socket,
+            server_ip: config.server_ip.clone(),
             requests: config.num_reqs,
             sent: 0,
             rate_inv: cycles::cycles_per_second() / config.req_rate as u64,
             start: cycles::rdtsc(),
             next: 0,
+            tenant_rng: Box::new(Uniform::from(1024..(1024 + config.num_tenants as u16))),
+            rng: Box::new(thread_rng()),
         }
     }
 
@@ -71,9 +87,9 @@ impl Sender {
                 }
 
                 // Pick a random port to send the request to a random tenant.
-                self.socket
-                    .send_to(&buf, "127.0.0.1:1024")
-                    .expect("couldn't send data");
+                let ip_address = self.server_ip.parse().unwrap();
+                let addr = SocketAddr::new(ip_address, self.tenant_rng.sample(&mut *self.rng));
+                self.socket.send_to(&buf, addr).expect("couldn't send data");
 
                 // Update the time stamp at which the next request should be generated, assuming that
                 // the first request was sent out at self.start.
