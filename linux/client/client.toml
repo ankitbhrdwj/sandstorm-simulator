@@ -1,0 +1,15 @@
+# The IP address of the server
+server_ip = "127.0.0.1"
+
+# The number of tenants to generate requests for. The exact tenant id for a
+# particular request should be generated from a distribution.
+num_tenants = 8
+
+# The number of requests that the client must generate.
+num_reqs = 64000000
+
+# The number of responses that the client must receive before printing out stats.
+num_resps = 34000000
+
+# The rate at which the client must issue requests.
+req_rate = 500000

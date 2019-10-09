@@ -17,18 +17,27 @@ use std::fs::File;
 use std::io::Read;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
-pub struct Config {
+pub struct ClientConfig {
     // The IP Address for the server.
     pub server_ip: String,
 
-    // The number of child processes the server will fork.
-    pub num_process: u64,
+    // The number of teants the client will generate requests for.
+    pub num_tenants: u64,
+
+    // The number of requests that the client must generate.
+    pub num_reqs: u64,
+
+    // The number of responses that the client must receive before terminating the process.
+    pub num_resps: u64,
+
+    // The req rate per second.
+    pub req_rate: u64,
 }
 
-impl Config {
-    pub fn load() -> Config {
+impl ClientConfig {
+    pub fn load() -> ClientConfig {
         let mut contents = String::new();
-        let filename = "server.toml";
+        let filename = "client.toml";
 
         let _ = File::open(filename).and_then(|mut file| file.read_to_string(&mut contents));
 
