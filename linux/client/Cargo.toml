@@ -1,5 +1,5 @@
 [package]
-name = "server"
+name = "client"
 version = "0.1.0"
 authors = ["Ankit Bhardwaj <bhrdwj.ankit@gmail.com>"]
 edition = "2018"
@@ -7,16 +7,17 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "server"
-path = "src/bin/server.rs"
+name = "client"
+path = "src/bin/client.rs"
 
 [lib]
-name = "server"
+name = "client"
 path = "src/lib.rs"
 
 [dependencies]
-nix = "*"
+time = "*"
 toml = "*"
 serde = "*"
 serde_derive = "*"
 serde-aux = "*"
+core_affinity = "*"
