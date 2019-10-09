@@ -1,0 +1,22 @@
+[package]
+name = "server"
+version = "0.1.0"
+authors = ["Ankit Bhardwaj <bhrdwj.ankit@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "main"
+path = "src/bin/main.rs"
+
+[lib]
+name = "server"
+path = "src/lib.rs"
+
+[dependencies]
+nix = "*"
+toml = "*"
+serde = "*"
+serde_derive = "*"
+serde-aux = "*"

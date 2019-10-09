@@ -1,0 +1,5 @@
+# The IP Address for the server.
+server_ip = "127.0.0.1"
+
+# The number of child processes the server will fork.
+num_process = 10
