@@ -235,10 +235,10 @@ fn main() {
         let socket_clone = Arc::clone(&socket);
 
         // Alternative sender and receivers.
-        children.push(thread::spawn(move || {
+        thread::spawn(move || {
             core_affinity::set_for_current(id);
             setup_send(Arc::clone(&socket), &ClientConfig::load());
-        }));
+        });
         i += 1;
 
         let id = core_ids[i];
