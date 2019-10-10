@@ -229,7 +229,7 @@ fn main() {
 
         let config = ClientConfig::load();
         start_port += i as u16;
-        let ipaddr: IpAddr = config.server_ip.parse().unwrap();
+        let ipaddr: IpAddr = config.client_ip.parse().unwrap();
         let addr = SocketAddr::new(ipaddr, start_port);
         let socket = Arc::new(UdpSocket::bind(addr).expect("couldn't bind to address"));
         let socket_clone = Arc::clone(&socket);

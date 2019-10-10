@@ -18,6 +18,9 @@ use std::io::Read;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct ClientConfig {
+    // The IP Address for the client.
+    pub client_ip: String,
+
     // The IP Address for the server.
     pub server_ip: String,
 

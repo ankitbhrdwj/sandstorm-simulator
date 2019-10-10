@@ -15,6 +15,7 @@
 
 extern crate server;
 
+use nix::sys::wait::wait;
 use nix::unistd::{fork, ForkResult};
 use server::listen::echo;
 use std::net::IpAddr;
@@ -55,4 +56,6 @@ fn main() {
         port_num - process_num as u16,
         port_num - 1
     );
+
+    let _ = wait();
 }

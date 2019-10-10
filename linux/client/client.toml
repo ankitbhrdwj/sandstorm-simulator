@@ -1,3 +1,6 @@
+# The IP address of the client
+client_ip = "127.0.0.1"
+
 # The IP address of the server
 server_ip = "127.0.0.1"
 
