@@ -20,7 +20,7 @@ curl https://sh.rustup.rs -sSf | sh
 source $HOME/.cargo/env
 rustup default nightly
 ```
-and build a synthetic client-server application.
+3) Build the synthetic client-server application.
 ```
 make
 ```
