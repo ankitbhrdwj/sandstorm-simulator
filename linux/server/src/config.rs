@@ -23,6 +23,9 @@ pub struct Config {
 
     // The number of child processes the server will fork.
     pub num_process: u64,
+
+    // The maximum number of cores, starting from zero, used for the server process.
+    pub max_cores: u64,
 }
 
 impl Config {
