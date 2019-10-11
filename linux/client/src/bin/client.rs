@@ -23,6 +23,7 @@ use rand::distributions::{Distribution, Uniform};
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
 
+use std::fs;
 use std::mem::transmute;
 use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::sync::Arc;
@@ -150,7 +151,7 @@ impl Receiver {
             match self.socket.recv(&mut buf) {
                 Ok(_received) => {
                     self.recvd += 1;
-                    let timestamp = u64::from_be_bytes(buf);
+                    let timestamp = u64::from_le_bytes(buf);
 
                     // Take latency measurement after warmup; say after 2M responses.
                     if self.recvd > 2 * 1000 * 1000 && self.master {
@@ -213,8 +214,21 @@ fn setup_recv(socket: Arc<UdpSocket>, config: &ClientConfig, master: bool) {
 
 // This is the `main` thread
 fn main() {
+    // Find all the core on numa node 0 and start the clients only on those cores.
     let core_ids = core_affinity::get_core_ids().unwrap();
     assert_eq!(core_ids.len() % 2, 0);
+    let contents = fs::read_to_string("/sys/devices/system/node/node0/cpulist")
+        .expect("Something went wrong reading the file");
+    let content: Vec<&str> = contents
+        .trim()
+        .split(|c| c == '\n' || c == '-' || c == ',')
+        .collect();
+    let start1 = content[0 % content.len()].parse::<usize>().unwrap();
+    let end1 = content[1 % content.len()].parse::<usize>().unwrap();
+    let start2 = content[2 % content.len()].parse::<usize>().unwrap();
+    let end2 = content[3 % content.len()].parse::<usize>().unwrap();
+
+    // Assign ports start from 49K.
     let mut start_port: u16 = 49000;
 
     // Make a vector to hold the children which are spawned.
@@ -225,32 +239,36 @@ fn main() {
 
     let mut i = 0;
     while i < core_ids.len() {
-        let id = core_ids[i];
+        if i >= start1 && i <= end1 || i >= start2 && i <= end2 {
+            let id = core_ids[i];
 
-        let config = ClientConfig::load();
-        start_port += i as u16;
-        let ipaddr: IpAddr = config.client_ip.parse().unwrap();
-        let addr = SocketAddr::new(ipaddr, start_port);
-        let socket = Arc::new(UdpSocket::bind(addr).expect("couldn't bind to address"));
-        let socket_clone = Arc::clone(&socket);
+            let config = ClientConfig::load();
+            start_port += i as u16;
+            let ipaddr: IpAddr = config.client_ip.parse().unwrap();
+            let addr = SocketAddr::new(ipaddr, start_port);
+            let socket = Arc::new(UdpSocket::bind(addr).expect("couldn't bind to address"));
+            let socket_clone = Arc::clone(&socket);
 
-        // Alternative sender and receivers.
-        thread::spawn(move || {
-            core_affinity::set_for_current(id);
-            setup_send(Arc::clone(&socket), &ClientConfig::load());
-        });
-        i += 1;
+            // Alternative sender and receivers.
+            thread::spawn(move || {
+                core_affinity::set_for_current(id);
+                setup_send(Arc::clone(&socket), &ClientConfig::load());
+            });
+            i += 1;
 
-        let id = core_ids[i];
-        if i == (core_ids.len() - 1) {
-            master = true;
+            let id = core_ids[i];
+            if i == end2 {
+                master = true;
+            }
+
+            children.push(thread::spawn(move || {
+                core_affinity::set_for_current(id);
+                setup_recv(Arc::clone(&socket_clone), &ClientConfig::load(), master);
+            }));
+            i += 1;
+        } else {
+            i += 1;
         }
-
-        children.push(thread::spawn(move || {
-            core_affinity::set_for_current(id);
-            setup_recv(Arc::clone(&socket_clone), &ClientConfig::load(), master);
-        }));
-        i += 1;
     }
 
     for child in children {

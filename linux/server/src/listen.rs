@@ -27,13 +27,10 @@ pub fn echo(ip_address: IpAddr, port: u16) {
     // the message, it will be cut off.
     let mut buf = [0; 8];
     loop {
-        let (amt, src) = socket
+        let (_amt, src) = socket
             .recv_from(&mut buf)
             .expect("couldn't bind to address");
 
-        // Redeclare `buf` as slice of the received data and send reverse data back to origin.
-        let buf = &mut buf[..amt];
-        buf.reverse();
-        socket.send_to(buf, &src).expect("couldn't bind to address");
+        socket.send_to(&buf, &src).expect("couldn't bind to address");
     }
 }
