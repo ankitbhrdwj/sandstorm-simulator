@@ -1,0 +1,17 @@
+# The maximum number of cores, starting from zero, used for the server process.
+max_cores = 32
+
+# The number of child processes the server will fork.
+num_tenants = 1024
+
+# The tenant_skew amount the total number of tenants.
+tenant_skew = 0.01
+
+# The number of requests that the client must generate.
+num_reqs = 34000000
+
+# The number of responses that the client must receive before printing out stats.
+num_resps = 34000000
+
+# The rate at which the client must issue requests.
+req_rate = 500000
