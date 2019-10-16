@@ -35,6 +35,9 @@ pub struct Config {
 
     // The req rate per second.
     pub req_rate: u64,
+
+    // Execute all the tasks for a tenant for each iteration.
+    pub batching: bool,
 }
 
 impl Config {

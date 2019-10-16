@@ -8,10 +8,13 @@ num_tenants = 32
 tenant_skew = 0.01
 
 # The number of requests that the client must generate.
-num_reqs = 36000000
+num_reqs = 22000000
 
 # The number of responses that the client must receive before printing out stats.
-num_resps = 34000000
+num_resps = 20000000
 
 # The rate at which the client must issue requests.
 req_rate = 500000
+
+# Execute all the tasks for a tenant in one iteration.
+batching = true

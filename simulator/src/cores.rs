@@ -37,6 +37,15 @@ pub struct Core {
 
     // The dispather generates the requests for each core.
     pub dispatcher: Dispatch,
+
+    // Starting tenant-id which this core handles.
+    pub start_tenant: u16,
+
+    // Last tenant-id which this core handles.
+    pub end_tenant: u16,
+
+    // Total number of context switches per core.
+    pub num_context_switches: u64,
 }
 
 impl Core {
@@ -52,6 +61,9 @@ impl Core {
             request_processed: 0,
             latencies: Vec::with_capacity(config.num_reqs as usize),
             dispatcher: Dispatch::new(config, low, high),
+            start_tenant: low,
+            end_tenant: high,
+            num_context_switches: 0,
         }
     }
 
@@ -63,11 +75,16 @@ impl Core {
         self.active_tenant = Some(tenant);
         self.rdtsc +=
             ((cycles::cycles_per_second() as f64 / 1e6) * consts::CONTEXT_SWITCH_TIME) as u64;
+        self.num_context_switches += 1;
     }
 
     pub fn generate_req(&mut self) -> Option<u16> {
         self.rdtsc += consts::DISPATCH_CYCLES;
         self.dispatcher.generate_request(self.rdtsc())
+    }
+
+    pub fn get_tenant_limit(&self) -> (u16, u16) {
+        (self.start_tenant, self.end_tenant)
     }
 
     pub fn process_request(&mut self, req: Request) {
@@ -104,10 +121,12 @@ impl Drop for Core {
         }
 
         println!(
-            "Throughput {} Median(ns) {} Tail(ns) {}",
+            "Throughput {} Median(ns) {} Tail(ns) {} \t Context-Switches/Total {} / {}",
             self.request_processed as f64 / cycles::to_seconds(self.rdtsc - 0),
             cycles::to_seconds(m) * 1e9,
-            cycles::to_seconds(t) * 1e9
+            cycles::to_seconds(t) * 1e9,
+            self.num_context_switches,
+            self.request_processed
         );
     }
 }

@@ -39,33 +39,58 @@ fn main() {
     }
     info!("Initialize {} Tenants\n", config.num_tenants);
 
-    // Generate and process requests.
     loop {
         // Generate requests for different tenants
         for c in 0..config.max_cores {
             while let Some(tenant_id) = cores[c as usize].generate_req() {
                 if let Some(tenant) = tenants.get_mut(&tenant_id) {
-                    (*tenant)
-                        .add_request(cores[(tenant_id % config.max_cores as u16) as usize].rdtsc());
+                    (*tenant).add_request(cores[c as usize].rdtsc());
                 }
             }
         }
 
-        // Process requests for each tenant one by one.
-        for c in 0..config.max_cores {
-            let mut t = c;
-            while t <= config.num_tenants + 1 {
-                if let Some(tenant) = tenants.get_mut(&(t as u16)) {
-                    while let Some(request) = (*tenant).get_request() {
-                        cores[c as usize].process_request(request);
+        // process requests.
+        if config.batching == true {
+            // Tenant execute all its tasks whenever it scheduled.
+            for c in 0..config.max_cores {
+                let (low, high) = cores[c as usize].get_tenant_limit();
+                for t in low..high {
+                    if let Some(tenant) = tenants.get_mut(&(t as u16)) {
+                        while let Some(request) = (*tenant).get_request() {
+                            cores[c as usize].process_request(request);
+                        }
                     }
                 }
-                t += config.max_cores;
+            }
+        } else {
+            // Tenant execute one task and then yields whenever it scheduled.
+            for c in 0..config.max_cores {
+                let mut no_task = false;
+                let (low, high) = cores[c as usize].get_tenant_limit();
+
+                // Run until all the tenant's runqueue is empty.
+                while no_task == false {
+                    no_task = true;
+                    for t in low..high {
+                        if let Some(tenant) = tenants.get_mut(&(t as u16)) {
+                            if let Some(request) = (*tenant).get_request() {
+                                cores[c as usize].process_request(request);
+                                no_task = false;
+                            }
+                        }
+                    }
+                }
             }
         }
 
         // Exit condition
-        if config.num_resps <= cores[config.max_cores as usize - 1].request_processed {
+        let mut exit = true;
+        for c in 0..config.max_cores {
+            if config.num_resps > cores[c as usize].request_processed {
+                exit = false;
+            }
+        }
+        if exit == true {
             info!("Request generation completed !!!\n");
             return;
         }
