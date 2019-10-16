@@ -18,3 +18,7 @@ req_rate = 500000
 
 # Execute all the tasks for a tenant in one iteration.
 batching = true
+
+# Isolation mechanism amoung domains on a core. Possible values can be:
+# NoIsolation, PageTableIsolation, MpkIsolation, VmfuncIsolation.
+isolation = "PageTableIsolation"

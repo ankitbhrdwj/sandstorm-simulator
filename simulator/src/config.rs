@@ -16,7 +16,15 @@
 use std::fs::File;
 use std::io::Read;
 
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Isolation {
+    NoIsolation,
+    PageTableIsolation,
+    MpkIsolation,
+    VmfuncIsolation,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     // The maximum number of cores used for the simultaion.
     pub max_cores: u64,
@@ -38,6 +46,8 @@ pub struct Config {
 
     // Execute all the tasks for a tenant for each iteration.
     pub batching: bool,
+
+    pub isolation: Isolation,
 }
 
 impl Config {

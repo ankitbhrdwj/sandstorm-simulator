@@ -13,7 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::Config;
+use super::config::{Config, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
@@ -46,6 +46,9 @@ pub struct Core {
 
     // Total number of context switches per core.
     pub num_context_switches: u64,
+
+    // Isolation mechanism amoung domains on a core.
+    pub isolation: Isolation,
 }
 
 impl Core {
@@ -64,6 +67,7 @@ impl Core {
             start_tenant: low,
             end_tenant: high,
             num_context_switches: 0,
+            isolation: config.isolation.clone(),
         }
     }
 
@@ -72,10 +76,27 @@ impl Core {
     }
 
     fn context_switch(&mut self, tenant: u16) {
-        self.active_tenant = Some(tenant);
-        self.rdtsc +=
-            ((cycles::cycles_per_second() as f64 / 1e6) * consts::CONTEXT_SWITCH_TIME) as u64;
-        self.num_context_switches += 1;
+        match self.isolation {
+            Isolation::NoIsolation => {
+                self.active_tenant = Some(tenant);
+                self.num_context_switches += 1;
+            }
+
+            Isolation::PageTableIsolation => {
+                self.active_tenant = Some(tenant);
+                self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
+                    * consts::CONTEXT_SWITCH_TIME) as u64;
+                self.num_context_switches += 1;
+            }
+
+            Isolation::MpkIsolation => {
+                info!("TODO: Implement Context Switch for {:?}", self.isolation);
+            }
+
+            Isolation::VmfuncIsolation => {
+                info!("TODO: Implement Context Switch for {:?}", self.isolation);
+            }
+        }
     }
 
     pub fn generate_req(&mut self) -> Option<u16> {
