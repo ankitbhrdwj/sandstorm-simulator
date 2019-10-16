@@ -42,7 +42,7 @@ impl Dispatch {
             num_requests: config.num_reqs,
             _tenant_skew: config.tenant_skew,
             sent: 0,
-            tenant_rng: Box::new(Uniform::from(1..config.num_tenants as u16)),
+            tenant_rng: Box::new(Uniform::from(1..(config.num_tenants + 1) as u16)),
             rng: Box::new(thread_rng()),
         }
     }
