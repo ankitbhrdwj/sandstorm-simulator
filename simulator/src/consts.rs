@@ -13,8 +13,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-pub const PREEMPTION_TIME: f64 = 2.0;
+pub const PREEMPTION_TIME: f64 = 2.0; // In micro-seconds
 
-pub const CONTEXT_SWITCH_TIME: f64 = 2.0;
+pub const CONTEXT_SWITCH_TIME: f64 = 2.0; // In micro-seconds
 
-pub const PROCESSING_TIME: f64 = 1.0;
+pub const PROCESSING_TIME: f64 = 1.0; // In micro-seconds
+
+pub const DISPATCH_CYCLES: u64 = 100; // In CPU-cycles

@@ -13,8 +13,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::config::Config;
 use super::consts;
 use super::cycles;
+use super::dispatcher::Dispatch;
 use super::request::Request;
 
 pub struct Core {
@@ -32,16 +34,24 @@ pub struct Core {
 
     // The latency for each request.
     pub latencies: Vec<u64>,
+
+    // The dispather generates the requests for each core.
+    pub dispatcher: Dispatch,
 }
 
 impl Core {
-    pub fn new(id: u8, responses: u64) -> Core {
+    pub fn new(id: u8, config: &Config) -> Core {
+        let uniform_divide: u16 = config.num_tenants as u16 / config.max_cores as u16;
+        let low = (id as u16 * uniform_divide) + 1 as u16;
+        let high = low + uniform_divide as u16;
+
         Core {
             core_id: id,
             active_tenant: None,
             rdtsc: 0,
             request_processed: 0,
-            latencies: Vec::with_capacity(responses as usize),
+            latencies: Vec::with_capacity(config.num_reqs as usize),
+            dispatcher: Dispatch::new(config, low, high),
         }
     }
 
@@ -55,6 +65,11 @@ impl Core {
             ((cycles::cycles_per_second() as f64 / 1e6) * consts::CONTEXT_SWITCH_TIME) as u64;
     }
 
+    pub fn generate_req(&mut self) -> Option<u16> {
+        self.rdtsc += consts::DISPATCH_CYCLES;
+        self.dispatcher.generate_request(self.rdtsc())
+    }
+
     pub fn process_request(&mut self, req: Request) {
         let tenant = req.get_tenant();
         if Some(tenant) != self.active_tenant {
@@ -65,6 +80,10 @@ impl Core {
         let latency = req.run(self.rdtsc);
         self.latencies.push(latency);
         self.request_processed += 1;
+
+        if self.core_id == 0 && self.request_processed % 2000000 == 0 {
+            info!("Processing requests");
+        }
     }
 }
 

@@ -15,44 +15,39 @@
 
 extern crate simulator;
 
-use simulator::dispatcher::Dispatch;
-use simulator::tenant::Tenant;
 use simulator::log::*;
+use simulator::tenant::Tenant;
 
 use std::collections::HashMap;
 
-pub const MAX_BATCH_SIZE: usize = 32;
-
 fn main() {
     env_logger::init();
-
     let config = simulator::config::Config::load();
 
-    // Intialize Cores, Tenants, and Dispatcher.
     let mut cores = Vec::with_capacity(config.max_cores as usize);
     let mut tenants: HashMap<u16, Tenant> = HashMap::with_capacity(config.num_tenants as usize);
-    let mut dispatcher = Dispatch::new(&config);
 
+    // Intialize Cores.
     for i in 0..config.max_cores {
-        cores.push(simulator::cores::Core::new(i as u8, config.num_resps));
+        cores.push(simulator::cores::Core::new(i as u8, &config));
     }
     info!("Initialize {} cores", config.max_cores);
 
+    // Intialize Tenants.
     for i in 1..(config.num_tenants + 1) {
         tenants.insert(i as u16, Tenant::new(i as u16));
     }
+    info!("Initialize {} Tenants\n", config.num_tenants);
 
+    // Generate and process requests.
     loop {
         // Generate requests for different tenants
-        for _i in 0..MAX_BATCH_SIZE {
-            if let Some(tenant_id) = dispatcher.generate_request() {
+        for c in 0..config.max_cores {
+            while let Some(tenant_id) = cores[c as usize].generate_req() {
                 if let Some(tenant) = tenants.get_mut(&tenant_id) {
                     (*tenant)
                         .add_request(cores[(tenant_id % config.max_cores as u16) as usize].rdtsc());
                 }
-            } else {
-                info!("Request generation completed !!!\n");
-                return;
             }
         }
 
@@ -62,12 +57,17 @@ fn main() {
             while t <= config.num_tenants + 1 {
                 if let Some(tenant) = tenants.get_mut(&(t as u16)) {
                     while let Some(request) = (*tenant).get_request() {
-                        //println!("Tenant id {}", request.get_tenant());
                         cores[c as usize].process_request(request);
                     }
                 }
                 t += config.max_cores;
             }
+        }
+
+        // Exit condition
+        if config.num_resps <= cores[config.max_cores as usize - 1].request_processed {
+            info!("Request generation completed !!!\n");
+            return;
         }
     }
 }

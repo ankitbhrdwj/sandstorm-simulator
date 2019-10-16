@@ -14,6 +14,7 @@
  */
 
 use super::config::Config;
+use super::cycles;
 
 use rand::distributions::{Distribution, Uniform};
 use rand::prelude::*;
@@ -27,7 +28,14 @@ pub struct Dispatch {
     _tenant_skew: f64,
 
     // The number of requests generated so far.
-    sent: u64,
+    pub sent: u64,
+
+    // The inverse of the rate at which requests are to be generated. Basically, the time interval
+    // between two request generations in cycles.
+    rate_inv: u64,
+
+    // The time stamp at which the next request must be issued in cycles.
+    next: u64,
 
     // The tenant random number generator.
     tenant_rng: Box<Uniform<u16>>,
@@ -37,22 +45,22 @@ pub struct Dispatch {
 }
 
 impl Dispatch {
-    pub fn new(config: &Config) -> Dispatch {
+    pub fn new(config: &Config, low: u16, high: u16) -> Dispatch {
         Dispatch {
             num_requests: config.num_reqs,
             _tenant_skew: config.tenant_skew,
             sent: 0,
-            tenant_rng: Box::new(Uniform::from(1..(config.num_tenants + 1) as u16)),
+            rate_inv: cycles::cycles_per_second() / config.req_rate as u64,
+            next: 0,
+            tenant_rng: Box::new(Uniform::from(low..high)),
             rng: Box::new(thread_rng()),
         }
     }
 
-    pub fn generate_request(&mut self) -> Option<u16> {
-        if self.sent <= self.num_requests {
+    pub fn generate_request(&mut self, curr: u64) -> Option<u16> {
+        if self.sent <= self.num_requests && (curr >= self.next || self.next == 0) {
             self.sent += 1;
-            if self.sent % 1000000 == 0 {
-                info!("Generated {} requests", self.sent);
-            }
+            self.next = 0 + self.sent * self.rate_inv;
             Some(self.tenant_rng.sample(&mut *self.rng))
         } else {
             None
