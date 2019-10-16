@@ -1,0 +1,3 @@
+[submodule "NetBricks"]
+	path = linux/NetBricks
+	url = https://github.com/NetSys/NetBricks.git
