@@ -7,7 +7,8 @@
 Cargo.lock
 
 # Ignore NetBricks objects
-linux/netbricks/native/*
+linux/netbricks/native/*.o
+linux/netbricks/native/*.so
 linux/netbricks/3rdparty/dpdk/*
 linux/netbricks/3rdparty/dpdk.tar.gz
 
