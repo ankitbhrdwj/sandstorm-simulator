@@ -4,7 +4,23 @@ version = "0.1.0"
 authors = ["Ankit Bhardwaj <bhrdwj.ankit@gmail.com>"]
 edition = "2018"
 
+[[bin]]
+name = "fast-client"
+path = "src/bin/main.rs"
+
+[lib]
+name = "client"
+path = "src/lib.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+time = "*"
+toml = "*"
+serde = "*"
+serde_derive = "*"
+serde-aux = "*"
+core_affinity = "*"
+rand  = "*"
+packet = "*"
 e2d2         = {path = "../netbricks/framework"}
