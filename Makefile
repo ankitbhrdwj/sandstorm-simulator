@@ -6,10 +6,9 @@ fast-client: netbricks
 	(cd linux/fast-client; cargo build --release)
 
 netbricks:
-	(./linux/NetBricks/3rdparty/get-dpdk.sh)
-	(cd linux/NetBricks/native; make)
-	mkdir -p linux/NetBricks/target/native
-	cp linux/NetBricks/native/libzcsi.so linux/NetBricks/target/native/libzcsi.so
+	(cd linux/netbricks/native; make)
+	mkdir -p linux/netbricks/target/native
+	cp linux/netbricks/native/libzcsi.so linux/netbricks/target/native/libzcsi.so
 
 format:
 	(cd linux/server; cargo fmt)
