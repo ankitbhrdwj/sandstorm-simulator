@@ -87,6 +87,7 @@ fn main() {
         let mut exit = true;
         for c in 0..config.max_cores {
             if config.num_resps > cores[c as usize].request_processed {
+                cores[c as usize].update_rdtsc();
                 exit = false;
             }
         }

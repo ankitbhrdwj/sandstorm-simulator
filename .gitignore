@@ -6,8 +6,9 @@
 # More information here http://doc.crates.io/guide.html#cargotoml-vs-cargolock
 Cargo.lock
 
-output
+output*
 samples.temp
+*.dep
 
 # Ignore NetBricks objects
 linux/netbricks/native/*.o

@@ -66,4 +66,8 @@ impl Dispatch {
             None
         }
     }
+
+    pub fn get_next(&self) -> u64 {
+        self.next.clone()
+    }
 }

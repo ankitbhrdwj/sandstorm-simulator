@@ -75,6 +75,13 @@ impl Core {
         self.rdtsc.clone()
     }
 
+    pub fn update_rdtsc(&mut self) {
+        let next_dispatch_time = self.dispatcher.get_next();
+        if self.rdtsc() < next_dispatch_time {
+            self.rdtsc = next_dispatch_time;
+        }
+    }
+
     fn context_switch(&mut self, tenant: u16) {
         match self.isolation {
             Isolation::NoIsolation => {
@@ -100,7 +107,7 @@ impl Core {
     }
 
     pub fn generate_req(&mut self) -> Option<u16> {
-        self.rdtsc += consts::DISPATCH_CYCLES;
+        //self.rdtsc += consts::DISPATCH_CYCLES;
         self.dispatcher.generate_request(self.rdtsc())
     }
 
