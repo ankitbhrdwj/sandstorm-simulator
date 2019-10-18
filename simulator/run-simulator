@@ -1,0 +1,38 @@
+#!/bin/sh
+
+# Check for a TOML file with simulator related configuration.
+if [ ! -f config.toml ];
+then
+    echo "Missing config.toml file (in simulator directory)."
+    exit -1
+fi
+
+max_cores=$(cat config.toml | grep "max_cores" | awk '{ print $NF }')
+
+rm -f samples.temp
+
+tenants=(32 64 128 256 512 1024 2048 4096 8192 16384)
+
+rates=(15625 31250 62500 93750 125000 156250 187500 218750 250000 281250 312500 343750 375000 406250 437500 468750 500000 531250 562500 593750 625000 656250 687500 718750 750000 781250 812500 843750 875000 906250 937500 968750 1000000)
+
+echo "Req-Rate Cores Tenants Throughput Median(ns) Tail(ns)" > output
+
+for tenant in ${tenants[@]}
+do
+	for rate in ${rates[@]}
+	do
+		sed -i "s/num_tenants = [0-9][0-9]*/num_tenants = $tenant/g" config.toml
+		sed -i "s/req_rate = [0-9][0-9]*/req_rate = $rate/g" config.toml
+
+		RUST_LOG=info ./target/release/simulator > samples.temp
+
+		thrpt=$(cat samples.temp | grep "Throughput" | awk 'BEGIN { sum = 0 } { sum += $2 } END { printf "%.f", sum }')
+		m=$(cat samples.temp | grep "Throughput" | awk -v cores=$max_cores 'BEGIN { sum = 0 } { sum += $4 } END { print sum/cores }')
+		t=$(cat samples.temp | grep "Throughput" | awk -v cores=$max_cores 'BEGIN { sum = 0 } { sum += $6 } END { print sum/cores }')
+
+		echo $(( $rate*$max_cores )), $max_cores, $tenant, $thrpt, $m, $t >> output
+		echo $(( $rate*$max_cores )), $max_cores, $tenant, $thrpt, $m, $t
+
+		rm -f samples.temp
+	done
+done
