@@ -7,6 +7,7 @@ use e2d2::scheduler::*;
 
 use std::sync::Arc;
 use std::mem::transmute;
+use std::fmt::Display;
 
 use client::config;
 use client::*;
@@ -49,19 +50,41 @@ impl Executable for ClientSend {
     }
 }
 
-pub struct ClientRecv {}
-impl ClientRecv {
-    pub fn new() -> ClientRecv {
-        ClientRecv {}
+pub struct ClientRecv<T>
+where
+    T: PacketTx + PacketRx + Display + Clone + 'static,
+{
+    // The network stack required to receives RPC response packets from a network port.
+    receiver: dispatch::Receiver<T>,
+}
+
+impl<T> ClientRecv<T>
+where
+    T: PacketTx + PacketRx + Display + Clone + 'static,
+{
+    pub fn new(port: T) -> ClientRecv<T> {
+        ClientRecv {
+            receiver: dispatch::Receiver::new(port)
+        }
     }
 
     pub fn recv(&mut self) {
-        //println!("Recv");
+        // Try to receive packets from the network port.
+        // If there are packets, sample the latency of the server.
+        if let Some(mut packets) = self.receiver.recv_res() {
+            while let Some(packet) = packets.pop() {
+                packet.free_packet();
+                println!("recvd");
+            }
+        }
     }
 }
 
 // Executable trait allowing LongRecv to be scheduled by Netbricks.
-impl Executable for ClientRecv {
+impl<T> Executable for ClientRecv<T>
+where
+    T: PacketTx + PacketRx + Display + Clone + 'static,
+{
     // Called internally by Netbricks.
     fn execute(&mut self) {
         self.recv();
@@ -105,7 +128,7 @@ where
     }
 
     // Add the receiver to a netbricks pipeline.
-    match scheduler.add_task(ClientRecv::new()) {
+    match scheduler.add_task(ClientRecv::new(ports[0].clone())) {
         Ok(_) => {
             println!(
                 "Successfully added ClientRecv with rx queue {}.",
