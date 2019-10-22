@@ -15,6 +15,7 @@
 
 extern crate simulator;
 
+use simulator::consts::BATCH_SIZE;
 use simulator::log::*;
 use simulator::tenant::Tenant;
 
@@ -51,13 +52,26 @@ fn main() {
 
         // process requests.
         if config.batching == true {
-            // Tenant execute all its tasks whenever it scheduled.
+            // Tenant executes BATCH_SIZE tasks whenever it's scheduled.
             for c in 0..config.max_cores {
+                let mut no_task = false;
                 let (low, high) = cores[c as usize].get_tenant_limit();
-                for t in low..high {
-                    if let Some(tenant) = tenants.get_mut(&(t as u16)) {
-                        while let Some(request) = (*tenant).get_request() {
-                            cores[c as usize].process_request(request);
+
+                // Keep running until run-queue has the tasks to execute.
+                while no_task == false {
+                    no_task = true;
+
+                    // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
+                    for t in low..high {
+                        if let Some(tenant) = tenants.get_mut(&(t as u16)) {
+                            for _t in 0..BATCH_SIZE {
+                                if let Some(request) = (*tenant).get_request() {
+                                    cores[c as usize].process_request(request);
+                                    no_task = false;
+                                } else {
+                                    break;
+                                }
+                            }
                         }
                     }
                 }

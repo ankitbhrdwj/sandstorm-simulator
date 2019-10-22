@@ -149,12 +149,12 @@ impl Drop for Core {
         }
 
         println!(
-            "Throughput {} Median(ns) {} Tail(ns) {} \t Context-Switches/Total {} / {}",
+            "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2}, Total-Time(sec) {:.2}",
             self.request_processed as f64 / cycles::to_seconds(self.rdtsc - 0),
-            cycles::to_seconds(m) * 1e9,
-            cycles::to_seconds(t) * 1e9,
-            self.num_context_switches,
-            self.request_processed
+            cycles::to_seconds(m) * 1e6,
+            cycles::to_seconds(t) * 1e6,
+            (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
+            self.request_processed as f64/ 1e6, (self.num_context_switches*2) as f64/1e6, cycles::to_seconds(self.rdtsc - 0)
         );
     }
 }

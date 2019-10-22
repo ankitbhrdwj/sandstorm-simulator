@@ -20,3 +20,5 @@ pub const CONTEXT_SWITCH_TIME: f64 = 2.0; // In micro-seconds
 pub const PROCESSING_TIME: f64 = 1.0; // In micro-seconds
 
 pub const DISPATCH_CYCLES: u64 = 100; // In CPU-cycles
+
+pub const BATCH_SIZE: usize = 32; //Batch-size for each tenant
