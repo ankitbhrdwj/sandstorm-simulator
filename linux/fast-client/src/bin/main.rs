@@ -107,7 +107,7 @@ fn setup_send<S>(
         Ok(_) => {
             println!(
                 "Successfully added ClientSend with tx queue {}.",
-                ports[0].rxq()
+                ports[0].txq()
             );
         }
 
@@ -158,8 +158,8 @@ fn main() {
     // The core id's which will run the sender and receiver threads.
     // XXX The following two arrays heavily depend on the set of cores
     // configured in setup.rs
-    let senders = [1];
-    let receive = [2];
+    let senders = [0];
+    let receive = [1];
     assert!((senders.len() == 1) && (receive.len() == 1));
 
     // Setup 1 senders, and 1 receivers.
