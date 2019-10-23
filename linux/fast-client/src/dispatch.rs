@@ -27,10 +27,7 @@ use super::e2d2::interface::*;
 use super::packet::ip::v4::checksum;
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::std::slice::from_raw_parts(
-        (p as *const T) as *const u8,
-        ::std::mem::size_of::<T>(),
-    )
+    ::std::slice::from_raw_parts((p as *const T) as *const u8, ::std::mem::size_of::<T>())
 }
 
 /// A simple RPC request generator for Sandstorm.
@@ -132,11 +129,10 @@ impl Sender {
         request
             .get_mut_header()
             .set_length(size_of::<IpHeader>() as u16 + udp_len);
-        
+
         let csum: u16;
         {
             csum = checksum(unsafe { any_as_u8_slice(request.get_mut_header()) });
-        
         }
         request.get_mut_header().set_csum(csum);
 
@@ -145,7 +141,7 @@ impl Sender {
 
     #[inline]
     pub fn send_request(&mut self, dst: u16, curr: &[u8], _id: u16) {
-        let mac = &self.req_mac_header;        
+        let mac = &self.req_mac_header;
         let ip = &self.req_ip_header;
         let udp = &self.req_udp_header;
 

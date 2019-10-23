@@ -20,8 +20,8 @@ extern crate serde;
 extern crate serde_aux;
 #[macro_use]
 extern crate serde_derive;
-extern crate toml;
 extern crate packet;
+extern crate toml;
 
 pub mod config;
 pub mod cycles;
