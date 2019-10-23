@@ -5,7 +5,7 @@ max_cores = 32
 num_tenants = 32
 
 # The tenant_skew amount the total number of tenants.
-tenant_skew = 0.01
+tenant_skew = 0.9
 
 # The number of requests that the client must generate.
 num_reqs = 22000000

@@ -16,16 +16,14 @@
 use super::config::Config;
 use super::cycles;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distributions::Distribution;
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
+use zipf::ZipfDistribution;
 
 pub struct Dispatch {
     // Total number of requests to generate.
     num_requests: u64,
-
-    // Tenant skew used for request generation.
-    _tenant_skew: f64,
 
     // The number of requests generated so far.
     pub sent: u64,
@@ -38,22 +36,32 @@ pub struct Dispatch {
     next: u64,
 
     // The tenant random number generator.
-    tenant_rng: Box<Uniform<u16>>,
+    tenant_rng: Box<ZipfDistribution>,
 
     // Random number generator.
     rng: Box<ThreadRng>,
+
+    // The lowest tenant number handled by a core.
+    low: u16,
+
+    // The highest tenant number handled by a core.
+    high: u16,
 }
 
 impl Dispatch {
     pub fn new(config: &Config, low: u16, high: u16) -> Dispatch {
         Dispatch {
             num_requests: config.num_reqs,
-            _tenant_skew: config.tenant_skew,
             sent: 0,
             rate_inv: cycles::cycles_per_second() / config.req_rate as u64,
             next: 0,
-            tenant_rng: Box::new(Uniform::from(low..high)),
+            tenant_rng: Box::new(
+                ZipfDistribution::new((high - low) as usize, config.tenant_skew)
+                    .expect("Couldn't create tenant RNG."),
+            ),
             rng: Box::new(thread_rng()),
+            low: low,
+            high: high,
         }
     }
 
@@ -61,7 +69,15 @@ impl Dispatch {
         if self.sent <= self.num_requests && (curr >= self.next || self.next == 0) {
             self.sent += 1;
             self.next = 0 + self.sent * self.rate_inv;
-            Some(self.tenant_rng.sample(&mut *self.rng))
+            let tenant = self.tenant_rng.sample(&mut *self.rng);
+            if self.low + tenant as u16 <= self.high {
+                Some(self.low + tenant as u16)
+            } else {
+                println!(
+                    "The tenant number can't be higher than the max allowed tenant on this core"
+                );
+                None
+            }
         } else {
             None
         }

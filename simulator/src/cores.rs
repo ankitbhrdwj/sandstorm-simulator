@@ -107,7 +107,6 @@ impl Core {
     }
 
     pub fn generate_req(&mut self) -> Option<u16> {
-        //self.rdtsc += consts::DISPATCH_CYCLES;
         self.dispatcher.generate_request(self.rdtsc())
     }
 

@@ -22,6 +22,7 @@ extern crate serde_derive;
 extern crate toml;
 #[macro_use]
 pub extern crate log;
+extern crate zipf;
 
 /// This module is used to read and parse the configuration file.
 pub mod config;

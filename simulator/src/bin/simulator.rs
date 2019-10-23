@@ -40,6 +40,11 @@ fn main() {
     }
     info!("Initialize {} Tenants\n", config.num_tenants);
 
+    let mut batch_size = 1;
+    if config.batching == true {
+        batch_size = BATCH_SIZE;
+    }
+
     loop {
         // Generate requests for different tenants
         for c in 0..config.max_cores {
@@ -50,46 +55,24 @@ fn main() {
             }
         }
 
-        // process requests.
-        if config.batching == true {
-            // Tenant executes BATCH_SIZE tasks whenever it's scheduled.
-            for c in 0..config.max_cores {
-                let mut no_task = false;
-                let (low, high) = cores[c as usize].get_tenant_limit();
+        // Tenant executes BATCH_SIZE tasks whenever it's scheduled.
+        for c in 0..config.max_cores {
+            let mut no_task = false;
+            let (low, high) = cores[c as usize].get_tenant_limit();
 
-                // Keep running until run-queue has the tasks to execute.
-                while no_task == false {
-                    no_task = true;
+            // Keep running until run-queue has the tasks to execute.
+            while no_task == false {
+                no_task = true;
 
-                    // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
-                    for t in low..high {
-                        if let Some(tenant) = tenants.get_mut(&(t as u16)) {
-                            for _t in 0..BATCH_SIZE {
-                                if let Some(request) = (*tenant).get_request() {
-                                    cores[c as usize].process_request(request);
-                                    no_task = false;
-                                } else {
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            // Tenant execute one task and then yields whenever it scheduled.
-            for c in 0..config.max_cores {
-                let mut no_task = false;
-                let (low, high) = cores[c as usize].get_tenant_limit();
-
-                // Run until all the tenant's runqueue is empty.
-                while no_task == false {
-                    no_task = true;
-                    for t in low..high {
-                        if let Some(tenant) = tenants.get_mut(&(t as u16)) {
+                // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
+                for t in low..high {
+                    if let Some(tenant) = tenants.get_mut(&(t as u16)) {
+                        for _t in 0..batch_size {
                             if let Some(request) = (*tenant).get_request() {
                                 cores[c as usize].process_request(request);
                                 no_task = false;
+                            } else {
+                                break;
                             }
                         }
                     }
