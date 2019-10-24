@@ -18,6 +18,7 @@ use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
 use super::request::Request;
+use super::tenant::Tenant;
 
 pub struct Core {
     // The id of the core.
@@ -49,13 +50,32 @@ pub struct Core {
 
     // Isolation mechanism amoung domains on a core.
     pub isolation: Isolation,
+
+    // Tenant vector, which holds the reference to tenants for a particular core.
+    pub tenants: Vec<Tenant>,
+
+    // Batch size used by the core/scheduler.
+    batch_size: usize,
 }
 
 impl Core {
     pub fn new(id: u8, config: &Config) -> Core {
         let uniform_divide: u16 = config.num_tenants as u16 / config.max_cores as u16;
         let low = (id as u16 * uniform_divide) + 1 as u16;
-        let high = low + uniform_divide as u16;
+        let mut high = low + uniform_divide as u16;
+        if id == config.max_cores as u8 - 1 {
+            high = config.num_tenants as u16 + 1;
+        }
+
+        let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
+        for i in low..high {
+            tenants.push(Tenant::new(i as u16));
+        }
+
+        let mut batch_size = 1;
+        if config.batching == true {
+            batch_size = consts::BATCH_SIZE;
+        }
 
         Core {
             core_id: id,
@@ -63,11 +83,13 @@ impl Core {
             rdtsc: 0,
             request_processed: 0,
             latencies: Vec::with_capacity(config.num_reqs as usize),
-            dispatcher: Dispatch::new(config, low, high),
+            dispatcher: Dispatch::new(config, (high - low) as usize),
             start_tenant: low,
             end_tenant: high,
             num_context_switches: 0,
             isolation: config.isolation.clone(),
+            tenants: tenants,
+            batch_size: batch_size,
         }
     }
 
@@ -107,7 +129,16 @@ impl Core {
     }
 
     pub fn generate_req(&mut self) -> Option<u16> {
-        self.dispatcher.generate_request(self.rdtsc())
+        if let Some(t) = self.dispatcher.generate_request(self.rdtsc()) {
+            let tenant = self.start_tenant + t - 1;
+            if tenant >= self.end_tenant {
+                None
+            } else {
+                Some(tenant)
+            }
+        } else {
+            None
+        }
     }
 
     pub fn get_tenant_limit(&self) -> (u16, u16) {
@@ -128,6 +159,39 @@ impl Core {
         if self.core_id == 0 && self.request_processed % 2000000 == 0 {
             info!("Processing requests");
         }
+    }
+
+    pub fn run(&mut self) {
+        // Generate the requests
+        while let Some(tenant_id) = self.generate_req() {
+            let index = tenant_id as usize - self.start_tenant as usize;
+            self.tenants[index].add_request(self.rdtsc);
+        }
+
+        // Execute the generated requests.
+        let mut no_task = false;
+        let (low, high) = self.get_tenant_limit();
+
+        // Keep running until run-queue has the tasks to execute.
+        while no_task == false {
+            no_task = true;
+
+            // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
+            for t in low..high {
+                let index: usize = (t - low) as usize;
+                for _t in 0..self.batch_size {
+                    if let Some(request) = self.tenants[index].get_request() {
+                        self.process_request(request);
+                        no_task = false;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Update the timestamp counter
+        self.update_rdtsc();
     }
 }
 

@@ -15,18 +15,13 @@
 
 extern crate simulator;
 
-use simulator::consts::BATCH_SIZE;
 use simulator::log::*;
-use simulator::tenant::Tenant;
-
-use std::collections::HashMap;
 
 fn main() {
     env_logger::init();
     let config = simulator::config::Config::load();
 
     let mut cores = Vec::with_capacity(config.max_cores as usize);
-    let mut tenants: HashMap<u16, Tenant> = HashMap::with_capacity(config.num_tenants as usize);
 
     // Intialize Cores.
     for i in 0..config.max_cores {
@@ -34,57 +29,16 @@ fn main() {
     }
     info!("Initialize {} cores", config.max_cores);
 
-    // Intialize Tenants.
-    for i in 1..(config.num_tenants + 1) {
-        tenants.insert(i as u16, Tenant::new(i as u16));
-    }
-    info!("Initialize {} Tenants\n", config.num_tenants);
-
-    let mut batch_size = 1;
-    if config.batching == true {
-        batch_size = BATCH_SIZE;
-    }
-
     loop {
-        // Generate requests for different tenants
+        // Run each core one by one.
         for c in 0..config.max_cores {
-            while let Some(tenant_id) = cores[c as usize].generate_req() {
-                if let Some(tenant) = tenants.get_mut(&tenant_id) {
-                    (*tenant).add_request(cores[c as usize].rdtsc());
-                }
-            }
+            cores[c as usize].run();
         }
 
-        // Tenant executes BATCH_SIZE tasks whenever it's scheduled.
-        for c in 0..config.max_cores {
-            let mut no_task = false;
-            let (low, high) = cores[c as usize].get_tenant_limit();
-
-            // Keep running until run-queue has the tasks to execute.
-            while no_task == false {
-                no_task = true;
-
-                // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
-                for t in low..high {
-                    if let Some(tenant) = tenants.get_mut(&(t as u16)) {
-                        for _t in 0..batch_size {
-                            if let Some(request) = (*tenant).get_request() {
-                                cores[c as usize].process_request(request);
-                                no_task = false;
-                            } else {
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Exit condition
+        // Check exit condition after each iteration.
         let mut exit = true;
         for c in 0..config.max_cores {
             if config.num_resps > cores[c as usize].request_processed {
-                cores[c as usize].update_rdtsc();
                 exit = false;
             }
         }
