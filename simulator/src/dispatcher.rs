@@ -13,10 +13,10 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::Config;
+use super::config;
 use super::cycles;
 
-use rand::distributions::Distribution;
+use rand::distributions::{Distribution, Uniform};
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
 use zipf::ZipfDistribution;
@@ -35,25 +35,34 @@ pub struct Dispatch {
     // The time stamp at which the next request must be issued in cycles.
     next: u64,
 
+    // The tenant zipf number generator.
+    tenant_rng_zipf: Box<ZipfDistribution>,
+
     // The tenant random number generator.
-    tenant_rng: Box<ZipfDistribution>,
+    tenant_rng_uniform: Box<Uniform<u16>>,
 
     // Random number generator.
     rng: Box<ThreadRng>,
+
+    // Distribution mechanism amoung tenants on a core.
+    distribution: config::Distribution,
 }
 
 impl Dispatch {
-    pub fn new(config: &Config, num_tenants: usize) -> Dispatch {
+    pub fn new(config: &config::Config, low: u16, high: u16) -> Dispatch {
+        let num_tenants = (high - low) as usize;
         Dispatch {
             num_requests: config.num_reqs,
             sent: 0,
             rate_inv: cycles::cycles_per_second() / config.req_rate as u64,
             next: 0,
-            tenant_rng: Box::new(
+            tenant_rng_zipf: Box::new(
                 ZipfDistribution::new(num_tenants, config.tenant_skew)
                     .expect("Couldn't create tenant RNG."),
             ),
+            tenant_rng_uniform: Box::new(Uniform::from(low..high)),
             rng: Box::new(thread_rng()),
+            distribution: config.distribution.clone(),
         }
     }
 
@@ -61,7 +70,15 @@ impl Dispatch {
         if self.sent <= self.num_requests && (curr >= self.next || self.next == 0) {
             self.sent += 1;
             self.next = 0 + self.sent * self.rate_inv;
-            Some(self.tenant_rng.sample(&mut *self.rng) as u16)
+            match self.distribution {
+                config::Distribution::Uniform => {
+                    Some(self.tenant_rng_uniform.sample(&mut *self.rng))
+                }
+
+                config::Distribution::Zipf => {
+                    Some(self.tenant_rng_zipf.sample(&mut *self.rng) as u16)
+                }
+            }
         } else {
             None
         }

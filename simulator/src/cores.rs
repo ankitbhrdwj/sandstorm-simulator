@@ -13,7 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::{Config, Isolation};
+use super::config::{Config, Distribution, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
@@ -56,6 +56,9 @@ pub struct Core {
 
     // Batch size used by the core/scheduler.
     batch_size: usize,
+
+    // Distribution mechanism amoung tenants on a core.
+    pub distribution: Distribution,
 }
 
 impl Core {
@@ -83,13 +86,14 @@ impl Core {
             rdtsc: 0,
             request_processed: 0,
             latencies: Vec::with_capacity(config.num_reqs as usize),
-            dispatcher: Dispatch::new(config, (high - low) as usize),
+            dispatcher: Dispatch::new(config, low, high),
             start_tenant: low,
             end_tenant: high,
             num_context_switches: 0,
             isolation: config.isolation.clone(),
             tenants: tenants,
             batch_size: batch_size,
+            distribution: config.distribution.clone(),
         }
     }
 
@@ -130,11 +134,25 @@ impl Core {
 
     pub fn generate_req(&mut self) -> Option<u16> {
         if let Some(t) = self.dispatcher.generate_request(self.rdtsc()) {
-            let tenant = self.start_tenant + t - 1;
-            if tenant >= self.end_tenant {
-                None
-            } else {
-                Some(tenant)
+            let tenant;
+            match self.distribution {
+                Distribution::Zipf => {
+                    tenant = self.start_tenant + t - 1;
+                    if tenant >= self.end_tenant {
+                        None
+                    } else {
+                        Some(tenant)
+                    }
+                }
+
+                Distribution::Uniform => {
+                    tenant = t;
+                    if tenant >= self.end_tenant {
+                        None
+                    } else {
+                        Some(tenant)
+                    }
+                }
             }
         } else {
             None

@@ -17,6 +17,12 @@ use std::fs::File;
 use std::io::Read;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Distribution {
+    Uniform,
+    Zipf,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum Isolation {
     NoIsolation,
     PageTableIsolation,
@@ -47,7 +53,11 @@ pub struct Config {
     // Execute all the tasks for a tenant for each iteration.
     pub batching: bool,
 
+    // This is to decide which memory isolation to use; No isolation, Paging, MPK, VMFunc.
     pub isolation: Isolation,
+
+    // This is to decide which tenant distribution to use; Uniform Random or Zipfian.
+    pub distribution: Distribution,
 }
 
 impl Config {

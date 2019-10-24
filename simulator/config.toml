@@ -22,3 +22,7 @@ batching = true
 # Isolation mechanism amoung domains on a core. Possible values can be:
 # NoIsolation, PageTableIsolation, MpkIsolation, VmfuncIsolation.
 isolation = "PageTableIsolation"
+
+# Distribution mechanism to generate requests across tenants. Possible values can be:
+# Uniform, Zipf.
+distribution = "Zipf"

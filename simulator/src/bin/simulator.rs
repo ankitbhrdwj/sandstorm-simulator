@@ -20,6 +20,7 @@ use simulator::log::*;
 fn main() {
     env_logger::init();
     let config = simulator::config::Config::load();
+    info!("Starting the Simulator with config {:?}\n", config);
 
     let mut cores = Vec::with_capacity(config.max_cores as usize);
 
@@ -27,7 +28,6 @@ fn main() {
     for i in 0..config.max_cores {
         cores.push(simulator::cores::Core::new(i as u8, &config));
     }
-    info!("Initialize {} cores", config.max_cores);
 
     loop {
         // Run each core one by one.
