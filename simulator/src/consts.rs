@@ -13,12 +13,20 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-pub const PREEMPTION_TIME: f64 = 2.0; // In micro-seconds
+// In CPU cycles. Shinjuku: 2523 to recieve signal(table 1) and 985 to swap context(table 2).
+pub const PREEMPTION_OVERHEAD_CYCLES: u64 = 3500;
 
-pub const CONTEXT_SWITCH_TIME: f64 = 2.0; // In micro-seconds
+// In micro-seconds; various papers talk about it(Splinter, lwc etc).
+pub const CONTEXT_SWITCH_TIME: f64 = 2.0;
 
-pub const PROCESSING_TIME: f64 = 1.0; // In micro-seconds
+// In micro-seconds
+pub const PROCESSING_TIME: f64 = 1.0;
 
-pub const BATCH_SIZE: usize = 8; //Batch-size for each tenant
+//Batch-size for each tenant
+pub const BATCH_SIZE: usize = 8;
 
-pub const MPK_SWITCH: u64 = 600; // In CPU Cycles; taken from HODOR paper.
+// In CPU Cycles; taken from HODOR paper.
+pub const MPK_SWITCH_CYCLES: u64 = 600;
+
+// Scheduler time quanta in micro-seconds.
+pub const QUANTA_TIME: f64 = 5.0;

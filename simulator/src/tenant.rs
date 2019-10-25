@@ -18,7 +18,7 @@ use std::collections::VecDeque;
 
 pub struct Tenant {
     // Task runqueue for this tenant.
-    pub rq: VecDeque<Request>,
+    pub rq: VecDeque<Box<Request>>,
 
     // The ID of the current tenant.
     pub tenant_id: u16,
@@ -33,11 +33,16 @@ impl Tenant {
     }
 
     pub fn add_request(&mut self, rdtsc: u64) {
-        let req = Request::new(self.tenant_id, rdtsc);
+        let task_time = 1.0;
+        let req = Box::new(Request::new(self.tenant_id, rdtsc, task_time));
         self.rq.push_back(req);
     }
 
-    pub fn get_request(&mut self) -> Option<Request> {
+    pub fn get_request(&mut self) -> Option<Box<Request>> {
         self.rq.pop_front()
+    }
+
+    pub fn enqueue_task(&mut self, req: Box<Request>) {
+        self.rq.push_back(req);
     }
 }

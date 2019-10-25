@@ -17,7 +17,7 @@ use super::config::{Config, Distribution, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
-use super::request::Request;
+use super::request::{Request, TaskState};
 use super::tenant::Tenant;
 
 use std::cmp::min;
@@ -159,7 +159,7 @@ impl Core {
                             // light-weight MPK domain switch; otherwise do full context-switch.
                             if tenant < range.end {
                                 self.active_tenant = Some(tenant);
-                                self.rdtsc += consts::MPK_SWITCH;
+                                self.rdtsc += consts::MPK_SWITCH_CYCLES;
                                 self.num_mpk_switches += 1;
                             } else {
                                 self.active_tenant = Some(tenant);
@@ -215,16 +215,29 @@ impl Core {
         (self.start_tenant, self.end_tenant)
     }
 
-    pub fn process_request(&mut self, req: Request) {
+    pub fn process_request(&mut self, mut req: Box<Request>, index: usize) {
         let tenant = req.get_tenant();
         if Some(tenant) != self.active_tenant {
             self.context_switch(tenant);
         }
 
-        self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6) * consts::PROCESSING_TIME) as u64;
-        let latency = req.run(self.rdtsc);
-        self.latencies.push(latency);
-        self.request_processed += 1;
+        let (time, taskstate) = req.run();
+        self.rdtsc += time;
+        match taskstate {
+            TaskState::Completed => {
+                let latency = self.rdtsc() - req.start_time();
+                self.latencies.push(latency);
+                self.request_processed += 1;
+            }
+
+            TaskState::Preempted => {
+                self.tenants[index].enqueue_task(req);
+            }
+
+            TaskState::Runnable | TaskState::Running => {
+                println!("The task shouldn't return this state");
+            }
+        }
 
         if self.core_id == 0 && self.request_processed % 2000000 == 0 {
             info!("Processing requests");
@@ -250,8 +263,9 @@ impl Core {
             for t in low..high {
                 let index: usize = (t - low) as usize;
                 for _t in 0..self.batch_size {
-                    if let Some(request) = self.tenants[index].get_request() {
-                        self.process_request(request);
+                    let task = self.tenants[index].get_request();
+                    if let Some(task) = task {
+                        self.process_request(task, index);
                         no_task = false;
                     } else {
                         break;
@@ -288,7 +302,7 @@ impl Drop for Core {
             cycles::to_seconds(t) * 1e6,
             (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
             self.request_processed as f64/ 1e6,
-            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(self.num_mpk_switches * consts::MPK_SWITCH),
+            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(self.num_mpk_switches * consts::MPK_SWITCH_CYCLES),
             cycles::to_seconds(self.rdtsc - 0)
         );
     }

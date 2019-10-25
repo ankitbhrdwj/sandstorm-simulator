@@ -13,24 +13,72 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::{consts, cycles};
+
 pub struct Request {
+    // This task belong to tenant `tenant_id`.
     tenant_id: u16,
-    start: u64,
+
+    // The starting time for this task.
+    start_time: u64,
+
+    // The task need `max_time` amount of micro-second time to complete.
+    max_time: f64,
+
+    // The remaining time in micro-second, which the task need to complete.
+    remaining_time: f64,
+
+    // The current state of the task.
+    taskstate: TaskState,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum TaskState {
+    Runnable,
+    Running,
+    Preempted,
+    Completed,
 }
 
 impl Request {
-    pub fn new(tenant: u16, rdstc: u64) -> Request {
+    pub fn new(tenant: u16, rdstc: u64, task_time: f64) -> Request {
         Request {
             tenant_id: tenant,
-            start: rdstc,
+            start_time: rdstc,
+            max_time: task_time,
+            remaining_time: task_time,
+            taskstate: TaskState::Runnable,
         }
     }
 
-    pub fn run(&self, now: u64) -> u64 {
-        now - self.start
+    pub fn run(&mut self) -> (u64, TaskState) {
+        let mut time = 0;
+        if self.remaining_time() <= consts::QUANTA_TIME {
+            time += ((cycles::cycles_per_second() as f64 / 1e6) * self.remaining_time) as u64;
+            self.taskstate = TaskState::Completed;
+        } else {
+            time += ((cycles::cycles_per_second() as f64 / 1e6) * consts::QUANTA_TIME) as u64;
+            self.remaining_time -= consts::QUANTA_TIME;
+
+            time += consts::PREEMPTION_OVERHEAD_CYCLES;
+            self.taskstate = TaskState::Preempted;
+        }
+        (time, self.taskstate)
     }
 
     pub fn get_tenant(&self) -> u16 {
         self.tenant_id.clone()
+    }
+
+    pub fn start_time(&self) -> u64 {
+        self.start_time.clone()
+    }
+
+    pub fn max_time(&self) -> f64 {
+        self.max_time.clone()
+    }
+
+    pub fn remaining_time(&self) -> f64 {
+        self.remaining_time.clone()
     }
 }
