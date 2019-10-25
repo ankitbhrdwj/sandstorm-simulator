@@ -71,6 +71,9 @@ pub struct Core {
 
     // Range for MPK domains.
     pub mpk_domains: Vec<Range<u16>>,
+
+    // Outstanding tasks in the queue.
+    outstanding: usize,
 }
 
 impl Core {
@@ -125,6 +128,7 @@ impl Core {
             batch_size: batch_size,
             distribution: config.distribution.clone(),
             mpk_domains: mpkdomains,
+            outstanding: 0,
         }
     }
 
@@ -134,7 +138,7 @@ impl Core {
 
     pub fn update_rdtsc(&mut self) {
         let next_dispatch_time = self.dispatcher.get_next();
-        if self.rdtsc() < next_dispatch_time {
+        if self.outstanding == 0 && self.rdtsc() < next_dispatch_time {
             self.rdtsc = next_dispatch_time;
         }
     }
@@ -232,6 +236,7 @@ impl Core {
                 let latency = self.rdtsc() - req.start_time();
                 self.latencies.push(latency);
                 self.request_processed += 1;
+                self.outstanding -= 1;
             }
 
             TaskState::Preempted => {
@@ -249,34 +254,31 @@ impl Core {
         }
     }
 
-    pub fn run(&mut self) {
-        // Generate the requests
+    fn run_dispatcher(&mut self) {
         while let Some(tenant_id) = self.generate_req() {
             let index = tenant_id as usize - self.start_tenant as usize;
             self.tenants[index].add_request(self.rdtsc);
+            self.outstanding += 1;
         }
+    }
 
-        // Execute the generated requests.
-        let mut no_task = false;
+    pub fn run(&mut self) {
         let (low, high) = self.get_tenant_limit();
 
-        // Keep running until run-queue has the tasks to execute.
-        while no_task == false {
-            no_task = true;
-
-            // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
-            for t in low..high {
-                let index: usize = (t - low) as usize;
-                for _t in 0..self.batch_size {
-                    let task = self.tenants[index].get_request();
-                    if let Some(task) = task {
-                        self.process_request(task, index);
-                        no_task = false;
-                    } else {
-                        break;
-                    }
+        // Go through each tenant one by one; executing BATCH_SIZE tasks at a time.
+        for t in low..high {
+            let index: usize = (t - low) as usize;
+            for _t in 0..self.batch_size {
+                let task = self.tenants[index].get_request();
+                if let Some(task) = task {
+                    self.process_request(task, index);
+                } else {
+                    break;
                 }
             }
+
+            // Generate some more requests.
+            self.run_dispatcher();
         }
 
         // Update the timestamp counter
