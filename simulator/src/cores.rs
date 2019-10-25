@@ -20,6 +20,9 @@ use super::dispatcher::Dispatch;
 use super::request::Request;
 use super::tenant::Tenant;
 
+use std::cmp::min;
+use std::ops::Range;
+
 pub struct Core {
     // The id of the core.
     pub core_id: u8,
@@ -48,6 +51,9 @@ pub struct Core {
     // Total number of context switches per core.
     pub num_context_switches: u64,
 
+    // Total number of MPK switches per core.
+    pub num_mpk_switches: u64,
+
     // Isolation mechanism amoung domains on a core.
     pub isolation: Isolation,
 
@@ -59,6 +65,9 @@ pub struct Core {
 
     // Distribution mechanism amoung tenants on a core.
     pub distribution: Distribution,
+
+    // Range for MPK domains.
+    pub mpk_domains: Vec<Range<u16>>,
 }
 
 impl Core {
@@ -70,6 +79,22 @@ impl Core {
             high = config.num_tenants as u16 + 1;
         }
 
+        // Partition tenants in MPK Domains.
+        let tenants_per_domain = 15;
+        let num_domains = (high - low) / tenants_per_domain;
+        let mut mpkdomains = Vec::with_capacity(num_domains as usize);
+
+        let mut mpk_low = low;
+        while mpk_low < high {
+            let mpk_high = min(mpk_low + tenants_per_domain, high);
+            mpkdomains.push(Range {
+                start: mpk_low,
+                end: mpk_high,
+            });
+            mpk_low = mpk_high;
+        }
+
+        // Intialize the tenants and assign these tenants to this core.
         let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
         for i in low..high {
             tenants.push(Tenant::new(i as u16));
@@ -90,10 +115,12 @@ impl Core {
             start_tenant: low,
             end_tenant: high,
             num_context_switches: 0,
+            num_mpk_switches: 0,
             isolation: config.isolation.clone(),
             tenants: tenants,
             batch_size: batch_size,
             distribution: config.distribution.clone(),
+            mpk_domains: mpkdomains,
         }
     }
 
@@ -123,7 +150,32 @@ impl Core {
             }
 
             Isolation::MpkIsolation => {
-                info!("TODO: Implement Context Switch for {:?}", self.isolation);
+                // If this is not the starting of the scheduler, then some tenant must be active.
+                // Otherwise, do a full context-switch to run the tenant process on this core.
+                if let Some(curr_tenant) = self.active_tenant {
+                    for range in &self.mpk_domains {
+                        if range.contains(&curr_tenant) {
+                            // If the new tenant is in same MPK Domain as old tenant then do the
+                            // light-weight MPK domain switch; otherwise do full context-switch.
+                            if tenant < range.end {
+                                self.active_tenant = Some(tenant);
+                                self.rdtsc += consts::MPK_SWITCH;
+                                self.num_mpk_switches += 1;
+                            } else {
+                                self.active_tenant = Some(tenant);
+                                self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
+                                    * consts::CONTEXT_SWITCH_TIME)
+                                    as u64;
+                                self.num_context_switches += 1;
+                            }
+                        }
+                    }
+                } else {
+                    self.active_tenant = Some(tenant);
+                    self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
+                        * consts::CONTEXT_SWITCH_TIME) as u64;
+                    self.num_context_switches += 1;
+                }
             }
 
             Isolation::VmfuncIsolation => {
@@ -230,12 +282,14 @@ impl Drop for Core {
         }
 
         println!(
-            "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2}, Total-Time(sec) {:.2}",
+            "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2} Total-Time(sec) {:.2}",
             self.request_processed as f64 / cycles::to_seconds(self.rdtsc - 0),
             cycles::to_seconds(m) * 1e6,
             cycles::to_seconds(t) * 1e6,
             (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
-            self.request_processed as f64/ 1e6, (self.num_context_switches*2) as f64/1e6, cycles::to_seconds(self.rdtsc - 0)
+            self.request_processed as f64/ 1e6,
+            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(self.num_mpk_switches * consts::MPK_SWITCH),
+            cycles::to_seconds(self.rdtsc - 0)
         );
     }
 }

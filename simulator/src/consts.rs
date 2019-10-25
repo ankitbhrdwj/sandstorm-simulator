@@ -20,3 +20,5 @@ pub const CONTEXT_SWITCH_TIME: f64 = 2.0; // In micro-seconds
 pub const PROCESSING_TIME: f64 = 1.0; // In micro-seconds
 
 pub const BATCH_SIZE: usize = 8; //Batch-size for each tenant
+
+pub const MPK_SWITCH: u64 = 600; // In CPU Cycles; taken from HODOR paper.
