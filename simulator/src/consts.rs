@@ -30,3 +30,7 @@ pub const MPK_SWITCH_CYCLES: u64 = 600;
 
 // Scheduler time quanta in micro-seconds.
 pub const QUANTA_TIME: f64 = 5.0;
+
+// Time distribution for short-running and long-running tasks.
+// Short-running tasks take 1 us and long running tasks take 1 ms.
+pub const TASK_DISTRIBUTION_TIME: [f64; 2] = [1.0, 1000.0];

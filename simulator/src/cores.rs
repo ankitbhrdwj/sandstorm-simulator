@@ -54,6 +54,9 @@ pub struct Core {
     // Total number of MPK switches per core.
     pub num_mpk_switches: u64,
 
+    // Total number of preemptions per core.
+    pub num_preemptions: u64,
+
     // Isolation mechanism amoung domains on a core.
     pub isolation: Isolation,
 
@@ -116,6 +119,7 @@ impl Core {
             end_tenant: high,
             num_context_switches: 0,
             num_mpk_switches: 0,
+            num_preemptions: 0,
             isolation: config.isolation.clone(),
             tenants: tenants,
             batch_size: batch_size,
@@ -231,6 +235,7 @@ impl Core {
             }
 
             TaskState::Preempted => {
+                self.num_preemptions += 1;
                 self.tenants[index].enqueue_task(req);
             }
 
@@ -295,6 +300,9 @@ impl Drop for Core {
             _ => m = self.latencies[self.latencies.len() / 2],
         }
 
+        let cs_cycles = (self.num_mpk_switches * consts::MPK_SWITCH_CYCLES)
+            + (self.num_preemptions * consts::PREEMPTION_OVERHEAD_CYCLES);
+
         println!(
             "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2} Total-Time(sec) {:.2}",
             self.request_processed as f64 / cycles::to_seconds(self.rdtsc - 0),
@@ -302,7 +310,7 @@ impl Drop for Core {
             cycles::to_seconds(t) * 1e6,
             (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
             self.request_processed as f64/ 1e6,
-            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(self.num_mpk_switches * consts::MPK_SWITCH_CYCLES),
+            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(cs_cycles),
             cycles::to_seconds(self.rdtsc - 0)
         );
     }
