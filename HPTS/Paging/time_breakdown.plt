@@ -1,5 +1,5 @@
 #!/usr/bin/gnuplot
-load 'bar-styles.gp'
+load '../bar-styles.gp'
 
 set terminal postscript eps enhanced color solid font "Helvetica,14" fontscale 1.0 #size 4,2
 set output 'CPU_breakdown_10.eps'
