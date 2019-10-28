@@ -13,7 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::{consts, cycles};
+use super::{config::Isolation, consts, cycles};
 
 pub struct Request {
     // This task belong to tenant `tenant_id`.
@@ -51,7 +51,7 @@ impl Request {
         }
     }
 
-    pub fn run(&mut self) -> (u64, TaskState) {
+    pub fn run(&mut self, isolation: &Isolation) -> (u64, TaskState) {
         let mut time = 0;
         if self.remaining_time() <= consts::QUANTA_TIME {
             time += ((cycles::cycles_per_second() as f64 / 1e6) * self.remaining_time) as u64;
@@ -59,9 +59,22 @@ impl Request {
         } else {
             time += ((cycles::cycles_per_second() as f64 / 1e6) * consts::QUANTA_TIME) as u64;
             self.remaining_time -= consts::QUANTA_TIME;
-
-            time += consts::PREEMPTION_OVERHEAD_CYCLES;
             self.taskstate = TaskState::Preempted;
+
+            match isolation {
+                Isolation::NoIsolation => {
+                    time += consts::NOISOLATION_PREEMPTION_OVERHEAD_CYCLES;
+                }
+                Isolation::PageTableIsolation => {
+                    time += consts::PAGING_PREEMPTION_OVERHEAD_CYCLES;
+                }
+                Isolation::MpkIsolation => {
+                    time += consts::MPK_PREEMPTION_OVERHEAD_CYCLES;
+                }
+                Isolation::VmfuncIsolation => {
+                    time += consts::VMFUNC_PREEMPTION_OVERHEAD_CYCLES;
+                }
+            }
         }
         (time, self.taskstate)
     }

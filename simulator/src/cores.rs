@@ -54,6 +54,9 @@ pub struct Core {
     // Total number of MPK switches per core.
     pub num_mpk_switches: u64,
 
+    // Total number of MPK switches per core.
+    pub num_vmfunc_switches: u64,
+
     // Total number of preemptions per core.
     pub num_preemptions: u64,
 
@@ -122,6 +125,7 @@ impl Core {
             end_tenant: high,
             num_context_switches: 0,
             num_mpk_switches: 0,
+            num_vmfunc_switches: 0,
             num_preemptions: 0,
             isolation: config.isolation.clone(),
             tenants: tenants,
@@ -143,7 +147,7 @@ impl Core {
         }
     }
 
-    fn context_switch(&mut self, tenant: u16) {
+    fn tenant_switch(&mut self, tenant: u16) {
         match self.isolation {
             Isolation::NoIsolation => {
                 self.active_tenant = Some(tenant);
@@ -152,8 +156,7 @@ impl Core {
 
             Isolation::PageTableIsolation => {
                 self.active_tenant = Some(tenant);
-                self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
-                    * consts::CONTEXT_SWITCH_TIME) as u64;
+                self.rdtsc += consts::PAGING_TENANT_SWITCH_CYCLES;
                 self.num_context_switches += 1;
             }
 
@@ -167,27 +170,26 @@ impl Core {
                             // light-weight MPK domain switch; otherwise do full context-switch.
                             if tenant < range.end {
                                 self.active_tenant = Some(tenant);
-                                self.rdtsc += consts::MPK_SWITCH_CYCLES;
+                                self.rdtsc += consts::MPK_TENANT_SWITCH_CYCLES;
                                 self.num_mpk_switches += 1;
                             } else {
                                 self.active_tenant = Some(tenant);
-                                self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
-                                    * consts::CONTEXT_SWITCH_TIME)
-                                    as u64;
+                                self.rdtsc += consts::PAGING_TENANT_SWITCH_CYCLES;
                                 self.num_context_switches += 1;
                             }
                         }
                     }
                 } else {
                     self.active_tenant = Some(tenant);
-                    self.rdtsc += ((cycles::cycles_per_second() as f64 / 1e6)
-                        * consts::CONTEXT_SWITCH_TIME) as u64;
+                    self.rdtsc += consts::PAGING_TENANT_SWITCH_CYCLES;
                     self.num_context_switches += 1;
                 }
             }
 
             Isolation::VmfuncIsolation => {
-                info!("TODO: Implement Context Switch for {:?}", self.isolation);
+                self.active_tenant = Some(tenant);
+                self.rdtsc += consts::VMFUNC_TENANT_SWITCH_CYCLES;
+                self.num_vmfunc_switches += 1;
             }
         }
     }
@@ -226,10 +228,10 @@ impl Core {
     pub fn process_request(&mut self, mut req: Box<Request>, index: usize) {
         let tenant = req.get_tenant();
         if Some(tenant) != self.active_tenant {
-            self.context_switch(tenant);
+            self.tenant_switch(tenant);
         }
 
-        let (time, taskstate) = req.run();
+        let (time, taskstate) = req.run(&self.isolation);
         self.rdtsc += time;
         match taskstate {
             TaskState::Completed => {
@@ -302,8 +304,29 @@ impl Drop for Core {
             _ => m = self.latencies[self.latencies.len() / 2],
         }
 
-        let cs_cycles = (self.num_mpk_switches * consts::MPK_SWITCH_CYCLES)
-            + (self.num_preemptions * consts::PREEMPTION_OVERHEAD_CYCLES);
+        let preemption_cycles;
+        let cs_cycles;
+        match self.isolation {
+            Isolation::NoIsolation => {
+                preemption_cycles =
+                    self.num_preemptions * consts::NOISOLATION_PREEMPTION_OVERHEAD_CYCLES;
+                cs_cycles = 0;
+            }
+            Isolation::PageTableIsolation => {
+                preemption_cycles =
+                    self.num_preemptions * consts::PAGING_PREEMPTION_OVERHEAD_CYCLES;
+                cs_cycles = self.num_context_switches * consts::PAGING_TENANT_SWITCH_CYCLES;
+            }
+            Isolation::MpkIsolation => {
+                preemption_cycles = self.num_preemptions * consts::MPK_PREEMPTION_OVERHEAD_CYCLES;
+                cs_cycles = self.num_mpk_switches * consts::MPK_TENANT_SWITCH_CYCLES;
+            }
+            Isolation::VmfuncIsolation => {
+                preemption_cycles =
+                    self.num_preemptions * consts::VMFUNC_PREEMPTION_OVERHEAD_CYCLES;
+                cs_cycles = self.num_vmfunc_switches * consts::VMFUNC_TENANT_SWITCH_CYCLES;
+            }
+        }
 
         println!(
             "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2} Total-Time(sec) {:.2}",
@@ -312,7 +335,7 @@ impl Drop for Core {
             cycles::to_seconds(t) * 1e6,
             (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
             self.request_processed as f64/ 1e6,
-            (self.num_context_switches as f64 * consts::CONTEXT_SWITCH_TIME)/1e6 + cycles::to_seconds(cs_cycles),
+            cycles::to_seconds(cs_cycles + preemption_cycles),
             cycles::to_seconds(self.rdtsc - 0)
         );
     }
