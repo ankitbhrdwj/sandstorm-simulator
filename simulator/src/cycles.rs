@@ -14,7 +14,6 @@
  */
 
 use std::sync::Once;
-use time::PreciseTime;
 
 static mut CYCLES_PER_SECOND: u64 = 0;
 static INIT: Once = Once::new();
@@ -33,25 +32,8 @@ fn init() -> u64 {
     // case we won't have corresponding readings.  To handle this (unlikely)
     // case, compute the overall result repeatedly, and wait until we get
     // two successive calculations that are within 0.1% of each other.
-    let mut old_cycles = 0.;
-    let mut cycles_per_second;
-    loop {
-        let start_time = PreciseTime::now();
-        let start_cycles = rdtsc();
-        loop {
-            let nanos = start_time.to(PreciseTime::now()).num_nanoseconds().unwrap() as f64;
-            if nanos > 10000000. {
-                cycles_per_second = (rdtsc() - start_cycles) as f64 * 1000000000.0 / nanos;
-                break;
-            }
-        }
-        let delta = cycles_per_second / 1000.0;
-        if (old_cycles > (cycles_per_second - delta)) && (old_cycles < (cycles_per_second + delta))
-        {
-            return cycles_per_second as u64;
-        }
-        old_cycles = cycles_per_second;
-    }
+    let cycles_per_second = 3.0 * 1e9;
+    cycles_per_second as u64
 }
 
 /// Return the CPU cycles per second for the executing processor.
@@ -88,25 +70,4 @@ pub fn rdtsc() -> u64 {
 /// Number of seconds corresponding to the given CPU cycles.
 pub fn to_seconds(cycles: u64) -> f64 {
     cycles as f64 / cycles_per_second() as f64
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use std::thread;
-    use std::time::Duration;
-
-    #[test]
-    fn test_init() {
-        assert!(cycles_per_second() > 1000000000);
-        assert!(cycles_per_second() < 5000000000);
-    }
-
-    #[test]
-    fn test_rdtsc_sanity() {
-        let start = rdtsc();
-        thread::sleep(Duration::from_secs(1));
-        let stop = rdtsc();
-        assert!(to_seconds(stop - start) - 1.0 < 0.001);
-    }
 }
