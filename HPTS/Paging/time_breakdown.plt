@@ -24,5 +24,5 @@ set key width -8 vertical maxrows 1
 set datafile separator ","
 set title "Memory isolation with Paging for 10 tenants"
 
-plot '10_tenants' using ($9/$10)*100:xtic(1) title "Context-Switch Overhead" ls 1, "" using ($8/$10)*100 title "Execution" ls 2, "" using (($10-$9-$8)/$10)*100 title "Polling" ls 3
+plot '10_tenants' using ($9/$10)*100:xtic(4) title "Context-Switch Overhead" ls 1, "" using ($8/$10)*100 title "Execution" ls 2, "" using (($10-$9-$8)/$10)*100 title "Polling" ls 3
 
