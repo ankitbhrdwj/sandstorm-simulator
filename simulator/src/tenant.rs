@@ -13,12 +13,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::consts;
 use super::request::Request;
 
-use rand::distributions::weighted::alias_method::WeightedIndex;
-use rand::prelude::*;
-use rand::rngs::ThreadRng;
 use std::collections::VecDeque;
 
 pub struct Tenant {
@@ -27,12 +23,6 @@ pub struct Tenant {
 
     // The ID of the current tenant.
     pub tenant_id: u16,
-
-    // Distribution of short-running and long-running tasks.
-    pub task_distribution: WeightedIndex<f64>,
-
-    // Random number generator.
-    rng: Box<ThreadRng>,
 }
 
 impl Tenant {
@@ -40,14 +30,10 @@ impl Tenant {
         Tenant {
             rq: VecDeque::with_capacity(32),
             tenant_id: tenant,
-            task_distribution: WeightedIndex::new(vec![99.9, 0.01]).unwrap(),
-            rng: Box::new(thread_rng()),
         }
     }
 
-    pub fn add_request(&mut self, rdtsc: u64) {
-        let index = self.task_distribution.sample(&mut *self.rng);
-        let task_time = consts::TASK_DISTRIBUTION_TIME[index];
+    pub fn add_request(&mut self, rdtsc: u64, task_time: f64) {
         let req = Box::new(Request::new(self.tenant_id, rdtsc, task_time));
         self.rq.push_back(req);
     }

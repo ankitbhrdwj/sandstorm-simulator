@@ -13,7 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::{Config, Distribution, Isolation};
+use super::config::{Config, Distribution as Dist, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
@@ -22,6 +22,11 @@ use super::tenant::Tenant;
 
 use std::cmp::min;
 use std::ops::Range;
+
+use rand::distributions::weighted::alias_method::WeightedIndex;
+use rand::distributions::Distribution;
+use rand::prelude::*;
+use rand::rngs::ThreadRng;
 
 pub struct Core {
     // The id of the core.
@@ -70,13 +75,21 @@ pub struct Core {
     batch_size: usize,
 
     // Distribution mechanism amoung tenants on a core.
-    pub distribution: Distribution,
+    pub distribution: Dist,
 
     // Range for MPK domains.
     pub mpk_domains: Vec<Range<u16>>,
 
     // Outstanding tasks in the queue.
     outstanding: usize,
+
+    // Distribution of short-running and long-running tasks.
+    pub task_distribution: WeightedIndex<f64>,
+
+    // Random number generator.
+    rng: Box<ThreadRng>,
+
+    last_task_state: TaskState,
 }
 
 impl Core {
@@ -133,6 +146,9 @@ impl Core {
             distribution: config.distribution.clone(),
             mpk_domains: mpkdomains,
             outstanding: 0,
+            task_distribution: WeightedIndex::new(vec![99.9, 0.1]).unwrap(),
+            rng: Box::new(thread_rng()),
+            last_task_state: TaskState::Completed,
         }
     }
 
@@ -148,6 +164,11 @@ impl Core {
     }
 
     fn tenant_switch(&mut self, tenant: u16) {
+        if self.last_task_state == TaskState::Preempted {
+            self.active_tenant = Some(tenant);
+            return;
+        }
+
         match self.isolation {
             Isolation::NoIsolation => {
                 self.active_tenant = Some(tenant);
@@ -198,7 +219,7 @@ impl Core {
         if let Some(t) = self.dispatcher.generate_request(self.rdtsc()) {
             let tenant;
             match self.distribution {
-                Distribution::Zipf => {
+                Dist::Zipf => {
                     tenant = self.start_tenant + t - 1;
                     if tenant >= self.end_tenant {
                         None
@@ -207,7 +228,7 @@ impl Core {
                     }
                 }
 
-                Distribution::Uniform => {
+                Dist::Uniform => {
                     tenant = t;
                     if tenant >= self.end_tenant {
                         None
@@ -239,11 +260,13 @@ impl Core {
                 self.latencies.push(latency);
                 self.request_processed += 1;
                 self.outstanding -= 1;
+                self.last_task_state = taskstate;
             }
 
             TaskState::Preempted => {
                 self.num_preemptions += 1;
                 self.tenants[index].enqueue_task(req);
+                self.last_task_state = taskstate;
             }
 
             TaskState::Runnable | TaskState::Running => {
@@ -258,8 +281,10 @@ impl Core {
 
     fn run_dispatcher(&mut self) {
         while let Some(tenant_id) = self.generate_req() {
+            let dindex = self.task_distribution.sample(&mut *self.rng);
+            let task_time = consts::TASK_DISTRIBUTION_TIME[dindex];
             let index = tenant_id as usize - self.start_tenant as usize;
-            self.tenants[index].add_request(self.rdtsc);
+            self.tenants[index].add_request(self.rdtsc, task_time);
             self.outstanding += 1;
         }
     }
@@ -271,6 +296,9 @@ impl Core {
         for t in low..high {
             let index: usize = (t - low) as usize;
             for _t in 0..self.batch_size {
+                // Generate some more requests.
+                self.run_dispatcher();
+
                 let task = self.tenants[index].get_request();
                 if let Some(task) = task {
                     self.process_request(task, index);
@@ -278,9 +306,6 @@ impl Core {
                     break;
                 }
             }
-
-            // Generate some more requests.
-            self.run_dispatcher();
         }
 
         // Update the timestamp counter
