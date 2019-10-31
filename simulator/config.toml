@@ -26,3 +26,7 @@ isolation = "PageTableIsolation"
 # Distribution mechanism to generate requests across tenants. Possible values can be:
 # Uniform, Zipf.
 distribution = "Zipf"
+
+# The Scheduling policy which is used to differentiate between short-running and long-running tasks.
+# Possible values can be: RoundRobin, ShortestJF.
+policy = "RoundRobin"

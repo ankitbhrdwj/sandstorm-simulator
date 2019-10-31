@@ -30,6 +30,12 @@ pub enum Isolation {
     VmfuncIsolation,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum Policy {
+    RoundRobin,
+    ShortestJF,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     // The maximum number of cores used for the simultaion.
@@ -58,6 +64,9 @@ pub struct Config {
 
     // This is to decide which tenant distribution to use; Uniform Random or Zipfian.
     pub distribution: Distribution,
+
+    // The scheduling policy which decides about creating task, picking task to execute and enqueuing preempted tasks.
+    pub policy: Policy,
 }
 
 impl Config {

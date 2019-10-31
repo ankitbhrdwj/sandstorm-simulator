@@ -13,11 +13,14 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::config::Policy;
 use super::config::{Config, Distribution as Dist, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
 use super::request::{Request, TaskState};
+use super::rr_sched::RoundRobin;
+use super::sjf_sched::ShortestJF;
 use super::tenant::Tenant;
 
 use std::cmp::min;
@@ -119,7 +122,14 @@ impl Core {
         // Intialize the tenants and assign these tenants to this core.
         let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
         for i in low..high {
-            tenants.push(Tenant::new(i as u16));
+            match config.policy {
+                Policy::RoundRobin => {
+                    tenants.push(Tenant::new(i as u16, Box::new(RoundRobin::new())));
+                }
+                Policy::ShortestJF => {
+                    tenants.push(Tenant::new(i as u16, Box::new(ShortestJF::new())));
+                }
+            }
         }
 
         let mut batch_size = 1;
@@ -299,7 +309,7 @@ impl Core {
                 // Generate some more requests.
                 self.run_dispatcher();
 
-                let task = self.tenants[index].get_request();
+                let task = self.tenants[index].get_request(self.rdtsc);
                 if let Some(task) = task {
                     self.process_request(task, index);
                 } else {

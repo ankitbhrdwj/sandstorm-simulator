@@ -23,15 +23,6 @@ static INIT: Once = Once::new();
 /// during initialization.
 /// Stolen from the RAMCloud code base. Thanks, John.
 fn init() -> u64 {
-    // Compute the frequency of the fine-grained CPU timer: to do this,
-    // take parallel time readings using both rdtsc and PreciseTime.
-    // After 10ms have elapsed, take the ratio between these readings.
-
-    // There is one tricky aspect, which is that we could get interrupted
-    // between calling gettimeofday and reading the cycle counter, in which
-    // case we won't have corresponding readings.  To handle this (unlikely)
-    // case, compute the overall result repeatedly, and wait until we get
-    // two successive calculations that are within 0.1% of each other.
     let cycles_per_second = 3.0 * 1e9;
     cycles_per_second as u64
 }

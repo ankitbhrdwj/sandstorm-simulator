@@ -16,31 +16,35 @@
 use super::request::Request;
 use super::sched::Scheduler;
 
-pub struct Tenant {
-    ///
-    pub sched: Box<dyn Scheduler>,
+use std::collections::VecDeque;
 
-    // The ID of the current tenant.
-    pub tenant_id: u16,
+pub struct RoundRobin {
+    // Task runqueue for this tenant.
+    pub rq: VecDeque<Box<Request>>,
 }
 
-impl Tenant {
-    pub fn new(tenant: u16, policy: Box<dyn Scheduler>) -> Tenant {
-        Tenant {
-            sched: policy,
-            tenant_id: tenant,
+impl RoundRobin {
+    pub fn new() -> RoundRobin {
+        RoundRobin {
+            rq: VecDeque::with_capacity(32),
         }
     }
+}
 
-    pub fn add_request(&mut self, rdtsc: u64, task_time: f64) {
-        self.sched.create_task(rdtsc, task_time, self.tenant_id);
+impl Scheduler for RoundRobin {
+    // Lookup the `Scheduler` trait for documentation on this method.
+    fn create_task(&mut self, rdtsc: u64, task_time: f64, tenant_id: u16) {
+        let req = Box::new(Request::new(tenant_id, rdtsc, task_time));
+        self.rq.push_back(req);
     }
 
-    pub fn get_request(&mut self, rdtsc: u64) -> Option<Box<Request>> {
-        self.sched.pick_next_task(rdtsc)
+    // Lookup the `Scheduler` trait for documentation on this method.
+    fn pick_next_task(&mut self, _rdtsc: u64) -> Option<Box<Request>> {
+        self.rq.pop_front()
     }
 
-    pub fn enqueue_task(&mut self, req: Box<Request>) {
-        self.sched.enqueue_task(req);
+    // Lookup the `Scheduler` trait for documentation on this method.
+    fn enqueue_task(&mut self, req: Box<Request>) {
+        self.rq.push_back(req);
     }
 }

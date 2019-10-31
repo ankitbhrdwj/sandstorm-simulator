@@ -44,3 +44,9 @@ pub mod dispatcher;
 
 /// This module contains the CPU cycles related functionality; rdtsc() etc.
 pub mod cycles;
+
+/// This module contains a trait to implement the scheduler.
+pub mod sched;
+
+mod rr_sched;
+mod sjf_sched;
