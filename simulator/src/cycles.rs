@@ -41,6 +41,10 @@ pub fn cycles_per_second() -> u64 {
     }
 }
 
+pub fn cycles_per_us() -> f64 {
+    cycles_per_second() as f64 / 1e6
+}
+
 /// Return a 64-bit timestamp using the rdtsc instruction.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 pub fn rdtsc() -> u64 {

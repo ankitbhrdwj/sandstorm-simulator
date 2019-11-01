@@ -34,6 +34,7 @@ pub enum Isolation {
 pub enum Policy {
     RoundRobin,
     ShortestJF,
+    MultiQ,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

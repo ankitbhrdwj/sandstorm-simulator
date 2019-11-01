@@ -28,5 +28,5 @@ isolation = "PageTableIsolation"
 distribution = "Zipf"
 
 # The Scheduling policy which is used to differentiate between short-running and long-running tasks.
-# Possible values can be: RoundRobin, ShortestJF.
+# Possible values can be: RoundRobin, ShortestJF, MultiQ.
 policy = "RoundRobin"

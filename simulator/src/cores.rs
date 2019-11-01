@@ -18,6 +18,7 @@ use super::config::{Config, Distribution as Dist, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
+use super::mq_sched::MultiQ;
 use super::request::{Request, TaskState};
 use super::rr_sched::RoundRobin;
 use super::sjf_sched::ShortestJF;
@@ -119,6 +120,28 @@ impl Core {
             mpk_low = mpk_high;
         }
 
+        let quanta_time;
+        match config.isolation {
+            Isolation::NoIsolation => {
+                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
+                    + consts::NOISOLATION_PREEMPTION_OVERHEAD_CYCLES as f64;
+            }
+            Isolation::PageTableIsolation => {
+                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
+                    + consts::PAGING_PREEMPTION_OVERHEAD_CYCLES as f64;
+            }
+            Isolation::MpkIsolation => {
+                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
+                    + consts::MPK_PREEMPTION_OVERHEAD_CYCLES as f64;
+            }
+            Isolation::VmfuncIsolation => {
+                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
+                    + consts::VMFUNC_PREEMPTION_OVERHEAD_CYCLES as f64;
+            }
+        }
+        let once_in_us =
+            (1.0 / ((cycles::cycles_per_second() / config.max_cores) as f64/ quanta_time)) * 1e6;
+
         // Intialize the tenants and assign these tenants to this core.
         let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
         for i in low..high {
@@ -128,6 +151,9 @@ impl Core {
                 }
                 Policy::ShortestJF => {
                     tenants.push(Tenant::new(i as u16, Box::new(ShortestJF::new())));
+                }
+                Policy::MultiQ => {
+                    tenants.push(Tenant::new(i as u16, Box::new(MultiQ::new(once_in_us * cycles::cycles_per_us()))));
                 }
             }
         }

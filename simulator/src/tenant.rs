@@ -17,7 +17,7 @@ use super::request::Request;
 use super::sched::Scheduler;
 
 pub struct Tenant {
-    ///
+    /// The scheduler is used to determine the schedule for the tasks for current tenant.
     pub sched: Box<dyn Scheduler>,
 
     // The ID of the current tenant.

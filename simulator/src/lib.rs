@@ -48,5 +48,7 @@ pub mod cycles;
 /// This module contains a trait to implement the scheduler.
 pub mod sched;
 
+// Different scheduling techniques.
 mod rr_sched;
 mod sjf_sched;
+mod mq_sched;
