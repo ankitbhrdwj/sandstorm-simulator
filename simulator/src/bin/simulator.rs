@@ -15,36 +15,9 @@
 
 extern crate simulator;
 
-use simulator::log::*;
+use simulator::cores::Simulator;
 
 fn main() {
     env_logger::init();
-    let config = simulator::config::Config::load();
-    info!("Starting the Simulator with config {:?}\n", config);
-
-    let mut cores = Vec::with_capacity(config.max_cores as usize);
-
-    // Intialize Cores.
-    for i in 0..config.max_cores {
-        cores.push(simulator::cores::Core::new(i as u8, &config));
-    }
-
-    loop {
-        // Run each core one by one.
-        for c in 0..config.max_cores {
-            cores[c as usize].run();
-        }
-
-        // Check exit condition after each iteration.
-        let mut exit = true;
-        for c in 0..config.max_cores {
-            if config.num_resps > cores[c as usize].request_processed {
-                exit = false;
-            }
-        }
-        if exit == true {
-            info!("Request generation completed !!!\n");
-            return;
-        }
-    }
+    Simulator::new().start();
 }

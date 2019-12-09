@@ -13,15 +13,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::Policy;
 use super::config::{Config, Distribution as Dist, Isolation};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
-use super::mq_sched::MultiQ;
 use super::request::{Request, TaskState};
 use super::rr_sched::RoundRobin;
-use super::sjf_sched::ShortestJF;
 use super::tenant::Tenant;
 
 use std::cmp::min;
@@ -31,6 +28,54 @@ use rand::distributions::weighted::alias_method::WeightedIndex;
 use rand::distributions::Distribution;
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
+
+pub struct Simulator {
+    config: Config,
+    cores: Vec<Core>,
+    latencies: Vec<u64>,
+}
+
+impl Simulator {
+    pub fn new() -> Simulator {
+        let config = Config::load();
+        info!("Starting the Simulator with config {:?}\n", config);
+        let mut cores = Vec::with_capacity(config.max_cores as usize);
+        for i in 0..config.max_cores {
+            cores.push(Core::new(i as u8, &config, config.max_cores));
+        }
+        let max_cores = config.max_cores as usize;
+        let num_reqs = config.num_reqs as usize;
+
+        Simulator {
+            config: config,
+            cores: cores,
+            latencies: Vec::with_capacity(max_cores * num_reqs),
+        }
+    }
+
+    pub fn start(&mut self) {
+        loop {
+            // Run each core one by one.
+            for c in 0..self.config.max_cores {
+                self.cores[c as usize].run();
+                let mut latency: Vec<u64> = self.cores[c as usize].latencies.drain(..).collect();
+                self.latencies.append(&mut latency);
+            }
+
+            // Check exit condition after each iteration.
+            let mut exit = true;
+            for c in 0..self.config.max_cores {
+                if self.config.num_resps > self.cores[c as usize].request_processed {
+                    exit = false;
+                }
+            }
+            if exit == true {
+                info!("Request generation completed !!!\n");
+                return;
+            }
+        }
+    }
+}
 
 pub struct Core {
     // The id of the core.
@@ -84,6 +129,9 @@ pub struct Core {
     // Range for MPK domains.
     pub mpk_domains: Vec<Range<u16>>,
 
+    // Range for VMFunc domains.
+    pub vmfunc_domains: Vec<Range<u16>>,
+
     // Outstanding tasks in the queue.
     outstanding: usize,
 
@@ -93,15 +141,16 @@ pub struct Core {
     // Random number generator.
     rng: Box<ThreadRng>,
 
+    // The last completed or preempted in the middle.
     last_task_state: TaskState,
 }
 
 impl Core {
-    pub fn new(id: u8, config: &Config) -> Core {
-        let uniform_divide: u16 = config.num_tenants as u16 / config.max_cores as u16;
+    pub fn new(id: u8, config: &Config, num_cores: u64) -> Core {
+        let uniform_divide: u16 = config.num_tenants as u16 / num_cores as u16;
         let low = (id as u16 * uniform_divide) + 1 as u16;
         let mut high = low + uniform_divide as u16;
-        if id == config.max_cores as u8 - 1 {
+        if id == num_cores as u8 - 1 {
             high = config.num_tenants as u16 + 1;
         }
 
@@ -120,42 +169,25 @@ impl Core {
             mpk_low = mpk_high;
         }
 
-        let quanta_time;
-        match config.isolation {
-            Isolation::NoIsolation => {
-                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
-                    + consts::NOISOLATION_PREEMPTION_OVERHEAD_CYCLES as f64;
-            }
-            Isolation::PageTableIsolation => {
-                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
-                    + consts::PAGING_PREEMPTION_OVERHEAD_CYCLES as f64;
-            }
-            Isolation::MpkIsolation => {
-                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
-                    + consts::MPK_PREEMPTION_OVERHEAD_CYCLES as f64;
-            }
-            Isolation::VmfuncIsolation => {
-                quanta_time = consts::QUANTA_TIME * cycles::cycles_per_us()
-                    + consts::VMFUNC_PREEMPTION_OVERHEAD_CYCLES as f64;
-            }
+        // Partition tenants in VMFUNC Domains.
+        let tenants_per_domain = 512;
+        let num_domains = (high - low) / tenants_per_domain;
+        let mut vmdomains = Vec::with_capacity(num_domains as usize);
+
+        let mut vm_low = low;
+        while vm_low < high {
+            let vm_high = min(vm_low + tenants_per_domain, high);
+            vmdomains.push(Range {
+                start: vm_low,
+                end: vm_high,
+            });
+            vm_low = vm_high;
         }
-        let once_in_us =
-            (1.0 / ((cycles::cycles_per_second() / config.max_cores) as f64/ quanta_time)) * 1e6;
 
         // Intialize the tenants and assign these tenants to this core.
         let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
         for i in low..high {
-            match config.policy {
-                Policy::RoundRobin => {
-                    tenants.push(Tenant::new(i as u16, Box::new(RoundRobin::new())));
-                }
-                Policy::ShortestJF => {
-                    tenants.push(Tenant::new(i as u16, Box::new(ShortestJF::new())));
-                }
-                Policy::MultiQ => {
-                    tenants.push(Tenant::new(i as u16, Box::new(MultiQ::new(once_in_us * cycles::cycles_per_us()))));
-                }
-            }
+            tenants.push(Tenant::new(i as u16, Box::new(RoundRobin::new())));
         }
 
         let mut batch_size = 1;
@@ -168,7 +200,7 @@ impl Core {
             active_tenant: None,
             rdtsc: 0,
             request_processed: 0,
-            latencies: Vec::with_capacity(config.num_reqs as usize),
+            latencies: Vec::with_capacity(batch_size),
             dispatcher: Dispatch::new(config, low, high),
             start_tenant: low,
             end_tenant: high,
@@ -181,6 +213,7 @@ impl Core {
             batch_size: batch_size,
             distribution: config.distribution.clone(),
             mpk_domains: mpkdomains,
+            vmfunc_domains: vmdomains,
             outstanding: 0,
             task_distribution: WeightedIndex::new(vec![99.9, 0.1]).unwrap(),
             rng: Box::new(thread_rng()),
@@ -244,9 +277,25 @@ impl Core {
             }
 
             Isolation::VmfuncIsolation => {
-                self.active_tenant = Some(tenant);
-                self.rdtsc += consts::VMFUNC_TENANT_SWITCH_CYCLES;
-                self.num_vmfunc_switches += 1;
+                if let Some(curr_tenant) = self.active_tenant {
+                    for range in &self.vmfunc_domains {
+                        if range.contains(&curr_tenant) {
+                            if tenant < range.end {
+                                self.active_tenant = Some(tenant);
+                                self.rdtsc += consts::VMFUNC_TENANT_SWITCH_CYCLES;
+                                self.num_vmfunc_switches += 1;
+                            } else {
+                                self.active_tenant = Some(tenant);
+                                self.rdtsc += consts::PAGING_TENANT_SWITCH_CYCLES;
+                                self.num_context_switches += 1;
+                            }
+                        }
+                    }
+                } else {
+                    self.active_tenant = Some(tenant);
+                    self.rdtsc += consts::PAGING_TENANT_SWITCH_CYCLES;
+                    self.num_context_switches += 1;
+                }
             }
         }
     }
@@ -349,7 +398,7 @@ impl Core {
     }
 }
 
-impl Drop for Core {
+impl Drop for Simulator {
     fn drop(&mut self) {
         // Calculate & print median & tail latency only on the master thread.
         self.latencies.sort();
@@ -364,7 +413,16 @@ impl Drop for Core {
 
             _ => m = self.latencies[self.latencies.len() / 2],
         }
+        println!(
+            "Latency: Median(us) {:.2} Tail(us) {:.2}",
+            cycles::to_seconds(m) * 1e6,
+            cycles::to_seconds(t) * 1e6,
+        );
+    }
+}
 
+impl Drop for Core {
+    fn drop(&mut self) {
         let preemption_cycles;
         let cs_cycles;
         match self.isolation {
@@ -390,10 +448,8 @@ impl Drop for Core {
         }
 
         println!(
-            "Throughput {:.2} Median(us) {:.2} Tail(us) {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2} Total-Time(sec) {:.2}",
+            "Throughput {:.2} Context-Switches(%) {:.2} Execution-Time(sec) {:.2} CS-Time(sec) {:.2} Total-Time(sec) {:.2}",
             self.request_processed as f64 / cycles::to_seconds(self.rdtsc - 0),
-            cycles::to_seconds(m) * 1e6,
-            cycles::to_seconds(t) * 1e6,
             (self.num_context_switches as f64 / self.request_processed as f64) * 100.0,
             self.request_processed as f64/ 1e6,
             cycles::to_seconds(cs_cycles + preemption_cycles),
