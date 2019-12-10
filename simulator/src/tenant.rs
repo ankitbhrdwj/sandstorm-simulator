@@ -13,6 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::cores::CoreType;
 use super::request::Request;
 use super::sched::Scheduler;
 
@@ -36,8 +37,8 @@ impl Tenant {
         self.sched.create_task(rdtsc, task_time, self.tenant_id);
     }
 
-    pub fn get_request(&mut self, rdtsc: u64) -> Option<Box<Request>> {
-        self.sched.pick_next_task(rdtsc)
+    pub fn get_request(&mut self, coretype: CoreType) -> Option<Box<Request>> {
+        self.sched.pick_next_task(coretype)
     }
 
     pub fn enqueue_task(&mut self, req: Box<Request>) {

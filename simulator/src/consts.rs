@@ -45,8 +45,11 @@ pub const VMFUNC_PREEMPTION_OVERHEAD_CYCLES: u64 = 2650;
 //Batch-size for each tenant
 pub const BATCH_SIZE: usize = 8;
 
-// Scheduler time quanta in micro-seconds.
+// Scheduler time quanta on small core in micro-seconds.
 pub const QUANTA_TIME: f64 = 5.0;
+
+// Scheduler time qunata on large core in micro-seconds.
+pub const LARGE_QUNATA_TIME: f64 = 50.0;
 
 // Time distribution for short-running and long-running tasks.
 // Short-running tasks take 1 us and long running tasks take 1 ms.

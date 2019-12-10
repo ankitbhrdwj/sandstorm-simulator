@@ -13,6 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::cores::CoreType;
 use super::request::Request;
 
 pub trait Scheduler {
@@ -27,11 +28,11 @@ pub trait Scheduler {
     /// This method picks the next task to execute on the CPU.
     ///
     /// # Arguments
-    /// `rdtsc`: The current timestamp counter value; used in deciding which task to pick next.
+    /// `coretype`: The current core type value; used in deciding which task to pick next.
     ///
     /// # Return
     /// Return a task to execute on the current CPU.
-    fn pick_next_task(&mut self, rdtsc: u64) -> Option<Box<Request>>;
+    fn pick_next_task(&mut self, coretype: CoreType) -> Option<Box<Request>>;
 
     /// This method decides where to execute the task after preemption.
     ///

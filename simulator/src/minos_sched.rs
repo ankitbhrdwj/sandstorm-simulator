@@ -19,33 +19,51 @@ use super::sched::Scheduler;
 
 use std::collections::VecDeque;
 
-pub struct RoundRobin {
-    // Task runqueue for this tenant.
-    pub rq: VecDeque<Box<Request>>,
+pub struct Minos {
+    // Task runqueue for small requests.
+    pub small_rq: VecDeque<Box<Request>>,
+
+    // Task runqueue for large request.
+    pub large_rq: VecDeque<Box<Request>>,
 }
 
-impl RoundRobin {
-    pub fn new() -> RoundRobin {
-        RoundRobin {
-            rq: VecDeque::with_capacity(32),
+impl Minos {
+    pub fn new() -> Minos {
+        Minos {
+            small_rq: VecDeque::with_capacity(32),
+            large_rq: VecDeque::with_capacity(32),
         }
     }
 }
 
-impl Scheduler for RoundRobin {
+impl Scheduler for Minos {
     // Lookup the `Scheduler` trait for documentation on this method.
     fn create_task(&mut self, rdtsc: u64, task_time: f64, tenant_id: u16) {
         let req = Box::new(Request::new(tenant_id, rdtsc, task_time));
-        self.rq.push_back(req);
+        self.small_rq.push_back(req);
     }
 
     // Lookup the `Scheduler` trait for documentation on this method.
-    fn pick_next_task(&mut self, _type: CoreType) -> Option<Box<Request>> {
-        self.rq.pop_front()
+    fn pick_next_task(&mut self, coretype: CoreType) -> Option<Box<Request>> {
+        match coretype {
+            CoreType::Small => {
+                // Don't allow large tasks on small cores due to head of line blocking.
+                self.small_rq.pop_front()
+            }
+
+            CoreType::Large => {
+                // Small tasks on large cores are fine as there is no head of line blocking.
+                if self.large_rq.len() > 0 {
+                    self.large_rq.pop_front()
+                } else {
+                    self.small_rq.pop_front()
+                }
+            }
+        }
     }
 
     // Lookup the `Scheduler` trait for documentation on this method.
     fn enqueue_task(&mut self, req: Box<Request>) {
-        self.rq.push_back(req);
+        self.large_rq.push_front(req);
     }
 }

@@ -30,10 +30,19 @@ pub enum Isolation {
     VmfuncIsolation,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub enum Policy {
+    RoundRobin,
+    Minos,
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
-    // The maximum number of cores used for the simultaion.
-    pub max_cores: u64,
+    // The maximum number of small cores used for the simultaion.
+    pub small_cores: u64,
+
+    // The maximum number of large cores for the simulation.
+    pub large_cores: u64,
 
     // The number of teants the client will generate requests for.
     pub num_tenants: u64,
@@ -58,6 +67,9 @@ pub struct Config {
 
     // This is to decide which tenant distribution to use; Uniform Random or Zipfian.
     pub distribution: Distribution,
+
+    // This is to decide the scheduling policy; Round Robin or minos like core partitioning.
+    pub policy: Policy,
 }
 
 impl Config {

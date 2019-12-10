@@ -13,24 +13,31 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::config::{Config, Distribution as Dist, Isolation};
+use super::config::{Config, Distribution as Dist, Isolation, Policy};
 use super::consts;
 use super::cycles;
 use super::dispatcher::Dispatch;
+use super::minos_sched::Minos;
 use super::request::{Request, TaskState};
 use super::rr_sched::RoundRobin;
 use super::tenant::Tenant;
 
-use std::cmp::min;
-use std::ops::Range;
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::cell::RefCell;
+use std::cmp::min;
+use std::collections::HashMap;
+use std::ops::Range;
+use std::sync::Arc;
 
 use rand::distributions::weighted::alias_method::WeightedIndex;
 use rand::distributions::Distribution;
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
+
+#[derive(PartialEq, Copy, Clone)]
+pub enum CoreType {
+    Small = 0x1,
+    Large = 0x2,
+}
 
 pub struct Simulator {
     config: Config,
@@ -45,9 +52,25 @@ impl Simulator {
         info!("Starting the Simulator with config {:?}\n", config);
         let mut tenants = HashMap::with_capacity(config.num_tenants as usize);
         for i in 1..config.num_tenants + 1 {
-            tenants.insert(i, Arc::new(RefCell::new(Tenant::new(i as u16, Box::new(RoundRobin::new())))));
+            match config.policy {
+                Policy::RoundRobin => {
+                    tenants.insert(
+                        i,
+                        Arc::new(RefCell::new(Tenant::new(
+                            i as u16,
+                            Box::new(RoundRobin::new()),
+                        ))),
+                    );
+                }
+                Policy::Minos => {
+                    tenants.insert(
+                        i,
+                        Arc::new(RefCell::new(Tenant::new(i as u16, Box::new(Minos::new())))),
+                    );
+                }
+            }
         }
-        let max_cores = config.max_cores as usize;
+        let max_cores = config.small_cores as usize;
         let num_reqs = config.num_reqs as usize;
 
         Simulator {
@@ -59,8 +82,33 @@ impl Simulator {
     }
 
     pub fn core_init(&mut self) {
-        for i in 0..self.config.max_cores {
-            self.cores.push(Core::new(i as u8, &self.config, self.config.max_cores, &self.tenants));
+        assert_eq!(self.config.small_cores + self.config.large_cores, 32);
+
+        if self.config.large_cores != 0 {
+            assert_eq!(self.config.policy, Policy::Minos);
+        } else {
+            assert_eq!(self.config.policy, Policy::RoundRobin);
+        }
+
+        for i in 0..self.config.small_cores {
+            self.cores.push(Core::new(
+                i as u8,
+                &self.config,
+                self.config.small_cores,
+                &self.tenants,
+                CoreType::Small,
+            ));
+        }
+
+        // Start from zero as the partition is relative and won't work if started from absolute core-id.
+        for i in 0..self.config.large_cores {
+            self.cores.push(Core::new(
+                i as u8,
+                &self.config,
+                self.config.large_cores,
+                &self.tenants,
+                CoreType::Large,
+            ));
         }
     }
 
@@ -68,7 +116,7 @@ impl Simulator {
         self.core_init();
         loop {
             // Run each core one by one.
-            for c in 0..self.config.max_cores {
+            for c in 0..self.config.small_cores {
                 self.cores[c as usize].run();
                 let mut latency: Vec<u64> = self.cores[c as usize].latencies.drain(..).collect();
                 self.latencies.append(&mut latency);
@@ -76,7 +124,7 @@ impl Simulator {
 
             // Check exit condition after each iteration.
             let mut exit = true;
-            for c in 0..self.config.max_cores {
+            for c in 0..self.config.small_cores {
                 if self.config.num_resps > self.cores[c as usize].request_processed {
                     exit = false;
                 }
@@ -155,10 +203,19 @@ pub struct Core {
 
     // The last completed or preempted in the middle.
     last_task_state: TaskState,
+
+    // Type of the core; Small or Large.
+    core_type: CoreType,
 }
 
 impl Core {
-    pub fn new(id: u8, config: &Config, num_cores: u64, tenants: &HashMap<u64, Arc<RefCell<Tenant>>>) -> Core {
+    pub fn new(
+        id: u8,
+        config: &Config,
+        num_cores: u64,
+        tenants: &HashMap<u64, Arc<RefCell<Tenant>>>,
+        coretype: CoreType,
+    ) -> Core {
         let uniform_divide: u16 = config.num_tenants as u16 / num_cores as u16;
         let low = (id as u16 * uniform_divide) + 1 as u16;
         let mut high = low + uniform_divide as u16;
@@ -231,6 +288,7 @@ impl Core {
             task_distribution: WeightedIndex::new(vec![99.9, 0.1]).unwrap(),
             rng: Box::new(thread_rng()),
             last_task_state: TaskState::Completed,
+            core_type: coretype,
         }
     }
 
@@ -350,7 +408,7 @@ impl Core {
             self.tenant_switch(tenant);
         }
 
-        let (time, taskstate) = req.run(&self.isolation);
+        let (time, taskstate) = req.run(&self.isolation, self.core_type);
         self.rdtsc += time;
         match taskstate {
             TaskState::Completed => {
@@ -382,7 +440,9 @@ impl Core {
             let dindex = self.task_distribution.sample(&mut *self.rng);
             let task_time = consts::TASK_DISTRIBUTION_TIME[dindex];
             let index = tenant_id as usize - self.start_tenant as usize;
-            self.tenants[index].borrow_mut().add_request(self.rdtsc, task_time);
+            self.tenants[index]
+                .borrow_mut()
+                .add_request(self.rdtsc, task_time);
             self.outstanding += 1;
         }
     }
@@ -397,7 +457,7 @@ impl Core {
                 // Generate some more requests.
                 self.run_dispatcher();
 
-                let task = self.tenants[index].borrow_mut().get_request(self.rdtsc);
+                let task = self.tenants[index].borrow_mut().get_request(self.core_type);
                 if let Some(task) = task {
                     self.process_request(task, index);
                 } else {

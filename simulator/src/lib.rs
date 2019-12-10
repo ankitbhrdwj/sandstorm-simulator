@@ -49,4 +49,5 @@ pub mod cycles;
 pub mod sched;
 
 // Different scheduling techniques.
+mod minos_sched;
 mod rr_sched;

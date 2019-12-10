@@ -1,5 +1,8 @@
 # The maximum number of cores, starting from zero, used for the server process.
-max_cores = 32
+small_cores = 32
+
+# The maximum number of large cores, starting from zero, used for the server process.
+large_cores = 0
 
 # The number of child processes the server will fork.
 num_tenants = 32
@@ -27,3 +30,5 @@ isolation = "PageTableIsolation"
 # Uniform, Zipf.
 distribution = "Zipf"
 
+# This is to decide the scheduling policy; RoundRobin or Minos like core partitioning.
+policy = "RoundRobin"

@@ -13,7 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-use super::{config::Isolation, consts, cycles};
+use super::{config::Isolation, consts, cores::CoreType, cycles};
 
 pub struct Request {
     // This task belong to tenant `tenant_id`.
@@ -51,14 +51,25 @@ impl Request {
         }
     }
 
-    pub fn run(&mut self, isolation: &Isolation) -> (u64, TaskState) {
+    pub fn run(&mut self, isolation: &Isolation, coretype: CoreType) -> (u64, TaskState) {
         let mut time = 0;
-        if self.remaining_time() <= consts::QUANTA_TIME {
+        let quant_time;
+        match coretype {
+            CoreType::Small => {
+                quant_time = consts::QUANTA_TIME;
+            }
+
+            CoreType::Large => {
+                quant_time = consts::LARGE_QUNATA_TIME;
+            }
+        }
+
+        if self.remaining_time() <= quant_time {
             time += ((cycles::cycles_per_second() as f64 / 1e6) * self.remaining_time) as u64;
             self.taskstate = TaskState::Completed;
         } else {
-            time += ((cycles::cycles_per_second() as f64 / 1e6) * consts::QUANTA_TIME) as u64;
-            self.remaining_time -= consts::QUANTA_TIME;
+            time += ((cycles::cycles_per_second() as f64 / 1e6) * quant_time) as u64;
+            self.remaining_time -= quant_time;
             self.taskstate = TaskState::Preempted;
 
             match isolation {
