@@ -23,6 +23,9 @@ use super::tenant::Tenant;
 
 use std::cmp::min;
 use std::ops::Range;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::cell::RefCell;
 
 use rand::distributions::weighted::alias_method::WeightedIndex;
 use rand::distributions::Distribution;
@@ -33,27 +36,36 @@ pub struct Simulator {
     config: Config,
     cores: Vec<Core>,
     latencies: Vec<u64>,
+    tenants: HashMap<u64, Arc<RefCell<Tenant>>>,
 }
 
 impl Simulator {
     pub fn new() -> Simulator {
         let config = Config::load();
         info!("Starting the Simulator with config {:?}\n", config);
-        let mut cores = Vec::with_capacity(config.max_cores as usize);
-        for i in 0..config.max_cores {
-            cores.push(Core::new(i as u8, &config, config.max_cores));
+        let mut tenants = HashMap::with_capacity(config.num_tenants as usize);
+        for i in 1..config.num_tenants + 1 {
+            tenants.insert(i, Arc::new(RefCell::new(Tenant::new(i as u16, Box::new(RoundRobin::new())))));
         }
         let max_cores = config.max_cores as usize;
         let num_reqs = config.num_reqs as usize;
 
         Simulator {
             config: config,
-            cores: cores,
+            cores: Vec::with_capacity(max_cores),
             latencies: Vec::with_capacity(max_cores * num_reqs),
+            tenants: tenants,
+        }
+    }
+
+    pub fn core_init(&mut self) {
+        for i in 0..self.config.max_cores {
+            self.cores.push(Core::new(i as u8, &self.config, self.config.max_cores, &self.tenants));
         }
     }
 
     pub fn start(&mut self) {
+        self.core_init();
         loop {
             // Run each core one by one.
             for c in 0..self.config.max_cores {
@@ -118,7 +130,7 @@ pub struct Core {
     pub isolation: Isolation,
 
     // Tenant vector, which holds the reference to tenants for a particular core.
-    pub tenants: Vec<Tenant>,
+    pub tenants: Vec<Arc<RefCell<Tenant>>>,
 
     // Batch size used by the core/scheduler.
     batch_size: usize,
@@ -146,7 +158,7 @@ pub struct Core {
 }
 
 impl Core {
-    pub fn new(id: u8, config: &Config, num_cores: u64) -> Core {
+    pub fn new(id: u8, config: &Config, num_cores: u64, tenants: &HashMap<u64, Arc<RefCell<Tenant>>>) -> Core {
         let uniform_divide: u16 = config.num_tenants as u16 / num_cores as u16;
         let low = (id as u16 * uniform_divide) + 1 as u16;
         let mut high = low + uniform_divide as u16;
@@ -185,9 +197,10 @@ impl Core {
         }
 
         // Intialize the tenants and assign these tenants to this core.
-        let mut tenants: Vec<Tenant> = Vec::with_capacity((high - low) as usize);
+        let mut tenants_vec: Vec<Arc<RefCell<Tenant>>> = Vec::with_capacity((high - low) as usize);
         for i in low..high {
-            tenants.push(Tenant::new(i as u16, Box::new(RoundRobin::new())));
+            let tenant = tenants.get(&(i as u64)).unwrap();
+            tenants_vec.push(Arc::clone(tenant));
         }
 
         let mut batch_size = 1;
@@ -209,7 +222,7 @@ impl Core {
             num_vmfunc_switches: 0,
             num_preemptions: 0,
             isolation: config.isolation.clone(),
-            tenants: tenants,
+            tenants: tenants_vec,
             batch_size: batch_size,
             distribution: config.distribution.clone(),
             mpk_domains: mpkdomains,
@@ -350,7 +363,7 @@ impl Core {
 
             TaskState::Preempted => {
                 self.num_preemptions += 1;
-                self.tenants[index].enqueue_task(req);
+                self.tenants[index].borrow_mut().enqueue_task(req);
                 self.last_task_state = taskstate;
             }
 
@@ -369,7 +382,7 @@ impl Core {
             let dindex = self.task_distribution.sample(&mut *self.rng);
             let task_time = consts::TASK_DISTRIBUTION_TIME[dindex];
             let index = tenant_id as usize - self.start_tenant as usize;
-            self.tenants[index].add_request(self.rdtsc, task_time);
+            self.tenants[index].borrow_mut().add_request(self.rdtsc, task_time);
             self.outstanding += 1;
         }
     }
@@ -384,7 +397,7 @@ impl Core {
                 // Generate some more requests.
                 self.run_dispatcher();
 
-                let task = self.tenants[index].get_request(self.rdtsc);
+                let task = self.tenants[index].borrow_mut().get_request(self.rdtsc);
                 if let Some(task) = task {
                     self.process_request(task, index);
                 } else {
