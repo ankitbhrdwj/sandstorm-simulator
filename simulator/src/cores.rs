@@ -33,7 +33,7 @@ use rand::distributions::Distribution;
 use rand::prelude::*;
 use rand::rngs::ThreadRng;
 
-#[derive(PartialEq, Copy, Clone)]
+#[derive(PartialEq, Copy, Clone, Debug)]
 pub enum CoreType {
     Small = 0x1,
     Large = 0x2,
@@ -86,6 +86,14 @@ impl Simulator {
 
         if self.config.large_cores != 0 {
             assert_eq!(self.config.policy, Policy::Minos);
+            assert_eq!(
+                ((self.config.req_rate as f64
+                    * 0.001
+                    * consts::TASK_DISTRIBUTION_TIME[1]
+                    * self.config.small_cores as f64)
+                    / 1e6) as u64,
+                self.config.large_cores
+            );
         } else {
             assert_eq!(self.config.policy, Policy::RoundRobin);
         }
@@ -116,7 +124,7 @@ impl Simulator {
         self.core_init();
         loop {
             // Run each core one by one.
-            for c in 0..self.config.small_cores {
+            for c in 0..(self.config.small_cores + self.config.large_cores) {
                 self.cores[c as usize].run();
                 let mut latency: Vec<u64> = self.cores[c as usize].latencies.drain(..).collect();
                 self.latencies.append(&mut latency);
@@ -206,6 +214,9 @@ pub struct Core {
 
     // Type of the core; Small or Large.
     core_type: CoreType,
+
+    // If the cores are partitioned between large and small cores.
+    is_core_partitioned: bool,
 }
 
 impl Core {
@@ -265,13 +276,32 @@ impl Core {
             batch_size = consts::BATCH_SIZE;
         }
 
+        let mut updated_id = id;
+        let mut req_rate = config.req_rate;
+        let mut num_reqs = config.num_reqs;
+        match coretype {
+            CoreType::Large => {
+                updated_id = id + config.small_cores as u8;
+                req_rate = (config.req_rate as f64 * 0.001 * config.small_cores as f64) as u64
+                    / config.large_cores;
+                num_reqs = (config.num_reqs as f64 * 0.001 * config.small_cores as f64) as u64
+                    / config.large_cores;
+            }
+            _ => {}
+        }
+
+        let mut is_core_partitioned = false;
+        if config.large_cores > 0 {
+            is_core_partitioned = true;
+        }
+
         Core {
-            core_id: id,
+            core_id: updated_id,
             active_tenant: None,
             rdtsc: 0,
             request_processed: 0,
             latencies: Vec::with_capacity(batch_size),
-            dispatcher: Dispatch::new(config, low, high),
+            dispatcher: Dispatch::new(config, low, high, req_rate, num_reqs),
             start_tenant: low,
             end_tenant: high,
             num_context_switches: 0,
@@ -289,6 +319,7 @@ impl Core {
             rng: Box::new(thread_rng()),
             last_task_state: TaskState::Completed,
             core_type: coretype,
+            is_core_partitioned: is_core_partitioned,
         }
     }
 
@@ -431,14 +462,23 @@ impl Core {
         }
 
         if self.core_id == 0 && self.request_processed % 2000000 == 0 {
-            info!("Processing requests");
+            info!("Requests Processed {}", self.request_processed);
         }
     }
 
     fn run_dispatcher(&mut self) {
         while let Some(tenant_id) = self.generate_req() {
             let dindex = self.task_distribution.sample(&mut *self.rng);
-            let task_time = consts::TASK_DISTRIBUTION_TIME[dindex];
+            let mut task_time = consts::TASK_DISTRIBUTION_TIME[dindex];
+            if self.is_core_partitioned == true {
+                match self.core_type {
+                    CoreType::Small => task_time = consts::TASK_DISTRIBUTION_TIME[0],
+
+                    CoreType::Large => {
+                        task_time = consts::TASK_DISTRIBUTION_TIME[1];
+                    }
+                }
+            }
             let index = tenant_id as usize - self.start_tenant as usize;
             self.tenants[index]
                 .borrow_mut()

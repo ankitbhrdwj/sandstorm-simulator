@@ -49,12 +49,18 @@ pub struct Dispatch {
 }
 
 impl Dispatch {
-    pub fn new(config: &config::Config, low: u16, high: u16) -> Dispatch {
+    pub fn new(
+        config: &config::Config,
+        low: u16,
+        high: u16,
+        req_rate: u64,
+        num_reqs: u64,
+    ) -> Dispatch {
         let num_tenants = (high - low) as usize;
         Dispatch {
-            num_requests: config.num_reqs,
+            num_requests: num_reqs,
             sent: 0,
-            rate_inv: cycles::cycles_per_second() / config.req_rate as u64,
+            rate_inv: cycles::cycles_per_second() / req_rate,
             next: 0,
             tenant_rng_zipf: Box::new(
                 ZipfDistribution::new(num_tenants, config.tenant_skew)

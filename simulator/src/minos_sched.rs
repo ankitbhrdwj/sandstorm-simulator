@@ -13,6 +13,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+use super::consts;
 use super::cores::CoreType;
 use super::request::Request;
 use super::sched::Scheduler;
@@ -40,7 +41,11 @@ impl Scheduler for Minos {
     // Lookup the `Scheduler` trait for documentation on this method.
     fn create_task(&mut self, rdtsc: u64, task_time: f64, tenant_id: u16) {
         let req = Box::new(Request::new(tenant_id, rdtsc, task_time));
-        self.small_rq.push_back(req);
+        if task_time == consts::TASK_DISTRIBUTION_TIME[0] {
+            self.small_rq.push_back(req);
+        } else {
+            self.large_rq.push_back(req);
+        }
     }
 
     // Lookup the `Scheduler` trait for documentation on this method.
