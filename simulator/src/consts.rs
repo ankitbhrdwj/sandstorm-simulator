@@ -20,11 +20,11 @@ pub const NOISOLATION_TENANT_SWITCH_CYCLES: u64 = 0;
 // In CPU Cycles; taken from lmbench experiment.(Linux context switch + hint to the scheduler);
 pub const PAGING_TENANT_SWITCH_CYCLES: u64 = 3500;
 
-// In CPU Cycles; taken from HODOR paper.
-pub const MPK_TENANT_SWITCH_CYCLES: u64 = 250;
+// In CPU Cycles; taken from HODOR paper. Also add 700 for swap context.
+pub const MPK_TENANT_SWITCH_CYCLES: u64 = 950;
 
-// In CPU Cycles; taken from Shinjuku paper.(sysenter-sysexit + VMFunc + No Mask Switch).
-pub const VMFUNC_TENANT_SWITCH_CYCLES: u64 = 450;
+// In CPU Cycles; taken from Shinjuku paper.(sysenter-sysexit + VMFunc + No Mask Switch). Also add 700 for swap context.
+pub const VMFUNC_TENANT_SWITCH_CYCLES: u64 = 1150;
 
 //====================================================================================================================//
 // In CPU cycles. Shinjuku: 4900 to send-recieve signal(table 1) and 700 to swap context.
@@ -37,9 +37,9 @@ pub const PAGING_PREEMPTION_OVERHEAD_CYCLES: u64 = 7800;
 // and 700 to swap context.
 pub const MPK_PREEMPTION_OVERHEAD_CYCLES: u64 = 5850;
 
-// In CPU cycles. Shinjuku: 2000 to send-recieve IPI(table 1) and 450 for
-// VMFUNC_TENANT_SWITCH_CYCLES.
-pub const VMFUNC_PREEMPTION_OVERHEAD_CYCLES: u64 = 2650;
+// In CPU cycles. Shinjuku: 2000 to send-recieve IPI(table 1) and 450(+200 for sysenter-sysexit) for
+// VMFUNC_TENANT_SWITCH_CYCLES and 700 to swap context.
+pub const VMFUNC_PREEMPTION_OVERHEAD_CYCLES: u64 = 3350;
 
 //====================================================================================================================//
 //Batch-size for each tenant

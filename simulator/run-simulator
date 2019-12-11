@@ -7,7 +7,7 @@ then
     exit -1
 fi
 
-max_cores=$(cat config.toml | grep "max_cores" | awk '{ print $NF }')
+max_cores=$(cat config.toml | grep "small_cores" | awk '{ print $NF }')
 
 #rm -f samples.temp
 
@@ -28,8 +28,8 @@ do
 		./target/release/simulator > samples.temp
 
 		thrpt=$(cat samples.temp | grep "Throughput" | awk 'BEGIN { sum = 0 } { sum += $2 } END { printf "%.f", sum }')
-		m=$(cat samples.temp | grep "Throughput" | awk -v cores=$max_cores 'BEGIN { sum = 0 } { sum += $4 } END { printf "%.2f", sum/cores }')
-		t=$(cat samples.temp | grep "Throughput" | awk -v cores=$max_cores 'BEGIN { sum = 0 } { sum += $6 } END { printf "%.2f", sum/cores }')
+		m=$(cat samples.temp | grep "Latency" | awk '{ printf "%.2f", $3 }')
+		t=$(cat samples.temp | grep "Latency" | awk '{ printf "%.2f", $5 }')
 		csper=$(cat samples.temp | grep "Throughput" | awk -v cores=$max_cores 'BEGIN { sum = 0 } { sum += $8 } END { printf "%.2f", sum/cores }')
 		etime=$(cat samples.temp | grep "Throughput" | awk 'BEGIN { sum = 0 } { sum += $10 } END { printf "%.2f", sum }')
 		cstime=$(cat samples.temp | grep "Throughput" | awk 'BEGIN { sum = 0 } { sum += $12 } END { printf "%.2f", sum }')
