@@ -57,12 +57,8 @@ impl Scheduler for Minos {
             }
 
             CoreType::Large => {
-                // Small tasks on large cores are fine as there is no head of line blocking.
-                if self.large_rq.len() > 0 {
-                    self.large_rq.pop_front()
-                } else {
-                    self.small_rq.pop_front()
-                }
+                // Don't allow small tasks as the rdtsc is out of sync on small and large cores.
+                self.large_rq.pop_front()
             }
         }
     }

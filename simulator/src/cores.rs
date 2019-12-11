@@ -87,12 +87,13 @@ impl Simulator {
         if self.config.large_cores != 0 {
             assert_eq!(self.config.policy, Policy::Minos);
             assert_eq!(
-                ((self.config.req_rate as f64
+                (((self.config.req_rate as f64
                     * 0.001
                     * consts::TASK_DISTRIBUTION_TIME[1]
                     * self.config.small_cores as f64)
-                    / 1e6) as u64,
-                self.config.large_cores
+                    / 1e6) as f64)
+                    .ceil(),
+                self.config.large_cores as f64
             );
         } else {
             assert_eq!(self.config.policy, Policy::RoundRobin);
