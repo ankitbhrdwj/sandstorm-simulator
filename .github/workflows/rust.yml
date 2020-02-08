@@ -6,14 +6,18 @@ jobs:
   build:
     name: Build and Test
     timeout-minutes: 10
+    runs-on: ${{ matrix.os }}
 
-    runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust:
-          - nightly
+        os: [ubuntu-latest]
+        rust: [nightly]
 
     steps:
+    - name: Set up a Rust toolchain
+      uses: hecrj/setup-rust-action@v1.0.2
+      with:
+        rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v1
     - name: Build
       run: cd /home/runner/work/os_project/os_project/simulator; cargo build --verbose
