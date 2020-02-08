@@ -8,12 +8,14 @@ jobs:
     timeout-minutes: 10
 
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - nightly
 
     steps:
     - uses: actions/checkout@v1
-    - name: Change Directory
-      run: cd /home/runner/work/os_project/os_project/simulator
     - name: Build
-      run: cargo build --verbose
+      run: cd /home/runner/work/os_project/os_project/simulator; cargo build --verbose
     - name: Run tests
-      run: cargo test --verbose
+      run: cd /home/runner/work/os_project/os_project/simulator; cargo test --verbose
