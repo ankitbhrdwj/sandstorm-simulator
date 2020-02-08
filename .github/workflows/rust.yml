@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Change Directory
-      run: cd simulator
+      run: cd /home/runner/work/os_project/os_project/simulator
     - name: Build
       run: cargo build --verbose
     - name: Run tests
