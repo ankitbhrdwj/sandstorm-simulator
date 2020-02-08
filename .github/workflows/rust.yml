@@ -8,8 +8,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: change director
-      run: cd simulator
     - uses: actions/checkout@v1
     - name: Build
       run: cargo build --verbose
