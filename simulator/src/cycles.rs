@@ -51,8 +51,8 @@ pub fn rdtsc() -> u64 {
     unsafe {
         let lo: u32;
         let hi: u32;
-        asm!("rdtsc" : "={eax}"(lo), "={edx}"(hi) : : : "volatile");
-        (((hi as u64) << 32) | lo as u64)
+        llvm_asm!("rdtsc" : "={eax}"(lo), "={edx}"(hi) : : : "volatile");
+        ((hi as u64) << 32) | lo as u64
     }
 }
 

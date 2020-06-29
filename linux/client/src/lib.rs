@@ -1,4 +1,4 @@
-#![feature(asm, integer_atomics, atomic_min_max)]
+#![feature(llvm_asm, integer_atomics)]
 
 extern crate serde;
 extern crate serde_aux;
