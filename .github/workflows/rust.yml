@@ -20,6 +20,6 @@ jobs:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v1
     - name: Build
-      run: cd /home/runner/work/os_project/os_project/simulator; cargo build --verbose
+      run: cd /home/runner/work/sandstorm-simulator/sandstorm-simulator/simulator; cargo build --verbose
     - name: Run tests
-      run: cd /home/runner/work/os_project/os_project/simulator; cargo test --verbose
+      run: cd /home/runner/work/sandstorm-simulator/sandstorm-simulator/simulator; cargo test --verbose
