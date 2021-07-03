@@ -1,4 +1,4 @@
-# os_project ![Rust](https://github.com/ankit-iitb/os_project/workflows/Rust/badge.svg?branch=master)
+# Sandstorm-simulator ![Rust](https://github.com/ankit-iitb/os_project/workflows/Rust/badge.svg?branch=master)
 
 The project aims to find out the effect of **preemption** and **context-switch** on **throughput** and **latency** for a large number of isolated domains(processes). The operating system overhead will increase sharply with the increase in the number of domains, especially when the total number of active domains are more than the number of cores.
 
